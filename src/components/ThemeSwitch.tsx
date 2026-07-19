@@ -8,10 +8,10 @@ const THEME_CYCLE: Theme[] = ["white", "light", "dark", "oled"];
 const STORAGE_KEY = "sparkdash-theme";
 
 function getInitialTheme(): Theme {
-  if (typeof window === "undefined") return "light";
+  if (typeof window === "undefined") return "white";
   const stored = localStorage.getItem(STORAGE_KEY);
   if ((stored as Theme | null) && THEME_CYCLE.includes(stored as Theme)) return stored as Theme;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return "white";
 }
 
 export function ThemeSwitch() {
