@@ -22,7 +22,7 @@ Add new Sparks from the UI at runtime. No code changes, no server restarts.
 - **Local & remote Sparks** — monitor the host the container runs on (direct sysfs/proc access) *and* remote units over SSH — all through the same collector code.
 - **LLM server auto-detection** — probes each Spark's port 8888 and identifies the backend (llama.cpp, vLLM, sglang) with live tokens/sec for both generation and prefill.
 - **Unified memory tracking** — monitors the GB10's 128 GB HBM3e unified memory pool with GPU/CPU split and live memory bandwidth via `nvidia-smi dmon`.
-- **Four themes** — dark (pure neutral grays, no blue tint), light (warm paper), cool white (neutral), and OLED (true black). No AI-slop colors.
+- **🎨 Four themes** — dark (pure neutral grays, no blue tint), light (warm paper), cool white (neutral), and OLED (true black). No AI-slop colors.
 - **SSH password encryption** — AES-256-GCM encrypted secrets survive container restarts. Passwords never touch `sparks.json` or API responses.
 - **Fully Dockerized** — single container with privileged access for host metrics. Compose files for dev and production.
 - **Hot-add configuration** — add, edit, remove, and reorder Sparks from the UI. No config files, no restarts.
