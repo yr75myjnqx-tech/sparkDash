@@ -336,8 +336,6 @@ Contributions are welcome. Conventions:
 - **Client**: TypeScript + React
 - Prefer extending the shared Spark model over per-unit special cases
 
-See [AGENTS.md](./AGENTS.md) and [CODEBASE.md](./CODEBASE.md) for project invariants.
-
 ---
 
 ## License
