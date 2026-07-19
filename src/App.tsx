@@ -141,7 +141,7 @@ function App() {
   }, []);
 
   return (
-    <div className="min-h-screen p-4 text-text sm:p-8">
+    <div className="min-h-screen p-0 text-text sm:p-8">
       <div className="dashboard-shell">
         <header className="mb-7 flex flex-wrap items-center gap-3">
           <button

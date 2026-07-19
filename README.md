@@ -1,4 +1,6 @@
-# sparkDash · Multi-DGX Spark Monitoring Dashboard
+# sparkDash
+
+**Multi-unit monitoring dashboard for NVIDIA DGX Spark (GB10)**
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-arm64-2d9d78?style=flat-square" alt="Platform: ARM64">
@@ -9,339 +11,352 @@
   <sub>by <a href="https://x.com/MiaAI_lab">Mia'a AI Lab</a></sub>
 </p>
 
-**sparkDash** is a real-time web dashboard for monitoring one or more **NVIDIA DGX Spark (GB10)** units from a single browser window. View GPU metrics, CPU load, memory bandwidth, storage I/O, network throughput, and local LLM server performance — all at a glance.
-
-Add new Sparks from the UI at runtime. No code changes, no server restarts.
+sparkDash is a real-time web dashboard for one or more **NVIDIA DGX Spark (GB10)** machines in a single browser window. It streams GPU, CPU, unified memory, storage, network, and local LLM metrics — and lets you add, edit, reorder, or remove Sparks from the UI without restarts or code changes.
 
 ---
 
-## ✨ Features
+## Table of contents
 
-- **Multi-unit monitoring** — watch any number of DGX Sparks on one dashboard. Each Spark gets its own tabbed page with full metrics.
-- **Real-time WebSocket streaming** — live-updating GPU, CPU, RAM, storage, network, and LLM data with configurable poll intervals.
-- **Local & remote Sparks** — monitor the host the container runs on (direct sysfs/proc access) *and* remote units over SSH — all through the same collector code.
-- **LLM server auto-detection** — probes each Spark's port 8888 and identifies the backend (llama.cpp, vLLM, sglang) with live tokens/sec for both generation and prefill.
-- **Unified memory tracking** — monitors the GB10's 128 GB HBM3e unified memory pool with GPU/CPU split and live memory bandwidth via `nvidia-smi dmon`.
-- **🎨 Four themes** — dark (pure neutral grays, no blue tint), light (warm paper), cool white (neutral), and OLED (true black). No AI-slop colors.
-- **SSH password encryption** — AES-256-GCM encrypted secrets survive container restarts. Passwords never touch `sparks.json` or API responses.
-- **Fully Dockerized** — single container with privileged access for host metrics. Compose files for dev and production.
-- **Hot-add configuration** — add, edit, remove, and reorder Sparks from the UI. No config files, no restarts.
-
----
-
-## 🖥️ Screenshots
-
-<img src="./assets/screenshot.png" alt="sparkDash dashboard screenshot showing the Overview page with multiple DGX Spark units, GPU metrics, and LLM status" width="800">
-
-*The Overview page showing multiple DGX Spark units with GPU usage, temperature, VRAM, and LLM throughput at a glance.*
+- [Features](#features)
+- [Screenshot](#screenshot)
+- [Quick start](#quick-start)
+- [Architecture](#architecture)
+- [Tech stack](#tech-stack)
+- [Repository layout](#repository-layout)
+- [REST API](#rest-api)
+- [Configuration](#configuration)
+- [Security](#security)
+- [Docker](#docker)
+- [Scripts](#scripts)
+- [How it works](#how-it-works)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
-## 🚀 Quick Start
+## Features
+
+| Area | What you get |
+|------|----------------|
+| **Multi-unit** | Any number of Sparks; each has a tabbed detail page plus a shared Overview |
+| **Live streaming** | WebSocket metrics with configurable poll intervals |
+| **Local + remote** | Host metrics via sysfs/proc/`nvidia-smi`; remotes over SSH (key or password) |
+| **LLM probe** | Auto-detects llama.cpp, vLLM, or sglang on port 8888 (configurable); live tok/s |
+| **Unified memory** | GB10 128 GB HBM3e pool, GPU/CPU split, bandwidth via `nvidia-smi dmon` |
+| **Themes** | Dark, light, cool white, OLED — neutral palettes, persisted in `localStorage` |
+| **Secrets** | SSH passwords AES-256-GCM encrypted; never in `sparks.json` or API responses |
+| **Docker-first** | Single privileged container for host metrics; prod and dev Compose files |
+| **Hot config** | Add / edit / remove / reorder Sparks from the UI with no process restart |
+
+---
+
+## Screenshot
+
+<img src="./assets/screenshot.png" alt="sparkDash Overview page with multiple DGX Spark units, GPU metrics, and LLM status" width="800">
+
+*Overview: GPU usage, temperature, memory, and LLM throughput across Sparks.*
+
+---
+
+## Quick start
 
 ### Prerequisites
 
-- An **NVIDIA DGX Spark (GB10)** — or any ARM64 Linux host with an NVIDIA GPU
-- Docker & Docker Compose
-- For remote Sparks: SSH access (key or password) + `sshpass` (already in the Docker image)
+- **NVIDIA DGX Spark (GB10)** or another ARM64 Linux host with an NVIDIA GPU
+- **Docker** and **Docker Compose**
+- For remote Sparks: SSH (key preferred, or password). `sshpass` is included in the image
 
 ### Production (Docker)
 
 ```bash
-# Clone the repo
-git clone https://github.com/your-org/sparkdash.git
-cd sparkdash
+git clone https://github.com/MiaAI-Lab/sparkDash.git
+cd sparkDash
 
-# Start the dashboard
 docker compose up --build -d
 ```
 
-Open **http://<host-ip>:5555** in your browser.
+Open **http://\<host-ip\>:5555**.
 
-### Development
+Config and encrypted secrets live under `./config` (bind-mounted) and survive container recreation.
+
+### Development (host)
 
 ```bash
 npm install
 npm run dev
 ```
 
-This starts the Vite dev server (port 5173, with HMR) and the Express API server (port 5555) concurrently. The Vite dev server proxies `/api` and `/ws` requests to the Express backend.
+- Vite (HMR): **http://localhost:5173**
+- Express API + WebSocket: **http://localhost:5555**
+
+Vite proxies `/api` and `/ws` to the Express server.
 
 ### Production from source
 
 ```bash
 npm install
-npm run build     # Build the React frontend
-npm start         # Start the Express server (serves built frontend from dist/)
+npm run build   # frontend → dist/
+npm start       # Express serves dist/ and API on :5555
 ```
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
-sparkDash follows a **"one Spark model, N instances"** principle. There are no per-Spark-number duplicated methods. Every Spark is a config record in `sparks.json`; the same `SparkMonitor`, `SystemCollector`, and `LlmProbe` code runs for all of them. Adding a Spark is a **config change, not a code change**.
+Design principle: **one Spark model, N instances**. Every Spark is a record in `config/sparks.json`. The same `SparkMonitor`, `SystemCollector`, and `LlmProbe` code runs for all of them. Adding a unit is a config change, not a code change.
 
 ```txt
-┌─────────────────────────── Docker container (sparkDash) ───────────────────────────┐
-│                                                                                     │
-│  Express server (server/)                                                           │
-│  ├─ config/sparks.json           ← Spark registry (read/write via API)              │
-│  ├─ SparkRegistry                ← loads + persists Sparks; emits change events     │
-│  ├─ SparkMonitor (per Spark)     ← owns one collector + one LLM probe + rate state  │
-│  │   ├─ SystemCollector          ← hw metrics: local sysfs/proc OR remote via SSH   │
-│  │   └─ LlmProbe                 ← HTTP to <lanIp>:8888, backend autodetect         │
-│  ├─ REST /api/*                                                                     │
-│  └─ WebSocket (per client)       ← pushes { sparks: [ {id, name, status, metrics} ] │
-│                                                                                     │
-│  React SPA (src/)                                                                   │
-│  └─ Top tabs: [Spark 1] [Spark 2] [+] → page per Spark + Overview dashboard         │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-        │ SSH (key or sshpass)               │ HTTP :8888
-        ▼                                      ▼
-   remote Spark(s)                        each Spark's LLM server
+┌────────────────────── Docker container (sparkDash) ──────────────────────┐
+│  Express (server/)                                                         │
+│  ├─ config/sparks.json        Spark registry (API read/write)              │
+│  ├─ SparkRegistry             load/persist Sparks; change events           │
+│  ├─ SparkMonitor (per Spark)  collector + LLM probe + rate baselines       │
+│  │   ├─ SystemCollector       local sysfs/proc OR remote SSH               │
+│  │   └─ LlmProbe              HTTP to host:LLM_PORT, backend autodetect    │
+│  ├─ REST /api/*                                                            │
+│  └─ WebSocket /ws             snapshot stream to browsers                  │
+│  React SPA (src/)  — Overview + per-Spark pages, themes, dialogs           │
+└────────────────────────────────────────────────────────────────────────────┘
+         │ SSH (key or sshpass)                    │ HTTP :8888
+         ▼                                         ▼
+    remote Spark(s)                         each Spark’s LLM server
 ```
 
-### Data Flow
+### Data flow
 
 ```txt
-Browser ←→ WebSocket (/ws) ←→ SparkMonitor.snapshot() ←→ SystemCollector + LlmProbe
-Browser ←→ REST (/api/*)   ←→ SparkRegistry (sparks.json) + SparkMonitor
+Browser  ←→  WebSocket /ws   ←→  SparkMonitor.snapshot()  ←→  collectors
+Browser  ←→  REST /api/*     ←→  SparkRegistry + SparkMonitor
 ```
 
-Background poll loops run continuously (independent of WebSocket clients) so rate-based metrics (token diffs, byte diffs, sector diffs) stay accurate.
+Poll loops run in the background (even with no clients) so rate metrics — tokens/s, network bytes/s, disk I/O — stay correct.
 
 ---
 
-## 🧩 Tech Stack
+## Tech stack
 
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | React 19, TypeScript, Vite 8, Tailwind CSS v4 |
-| **Backend** | Node.js, Express 5, WebSocket (ws) |
-| **Language** | ESM JavaScript (server) + TypeScript (client) |
-| **Platform** | ARM64 — NVIDIA DGX Spark GB10 (Neoverse V2) |
-| **Deployment** | Docker (multi-stage, arm64) |
-| **Encryption** | AES-256-GCM (SSH passwords) |
-| **Port** | 5555 (dashboard), 5173 (Vite dev server) |
+| Layer | Stack |
+|-------|--------|
+| Frontend | React 19, TypeScript, Vite 8, Tailwind CSS v4 |
+| Backend | Node.js (ESM), Express 5, `ws` |
+| Platform | ARM64 — DGX Spark GB10 (Neoverse V2) |
+| Deploy | Docker multi-stage (arm64), Compose |
+| Secrets | AES-256-GCM SSH password store |
+| Ports | **5555** dashboard/API; **5173** Vite (dev only) |
 
 ---
 
-## 📦 Repository Structure
+## Repository layout
 
-```
+```txt
 sparkDash/
-├── src/                          # Frontend (React + TypeScript)
-│   ├── main.tsx                  # React root mount
-│   ├── App.tsx                   # Shell: header, tabs, SparkPage, dialogs
-│   ├── index.css                 # Tailwind v4 + 4 themes (CSS custom properties)
-│   ├── api/
-│   │   ├── client.ts             # REST fetch helpers
-│   │   └── types.ts              # TypeScript interfaces (SparkConfig, metrics, WS)
-│   ├── hooks/
-│   │   └── useSnapshot.ts        # WebSocket hook
-│   ├── components/
-│   │   ├── SparkTabs.tsx          # Drag-reorderable tab bar
-│   │   ├── AddSparkDialog.tsx     # Add Spark form
-│   │   ├── EditSparkDialog.tsx    # Edit/remove Spark form
-│   │   ├── SettingsDialog.tsx     # Global settings
-│   │   ├── ThemeSwitch.tsx        # Dark/light/white/OLED toggle
-│   │   ├── OverviewPage/          # Cross-Spark summary grid
-│   │   ├── SparkPage/             # Per-Spark metrics (GPU, CPU, Storage, Network, LLM)
-│   │   └── ui/                    # Reusable primitives (Panel, MetricBar, Sparkline, icons)
-│   └── constants.ts
-├── server/                       # Backend (Node.js + Express, plain JS)
-│   ├── index.js                  # Express + WebSocket entrypoint, all REST routes inline
-│   ├── config.js                 # Constants, env vars, DGX Spark specs
-│   ├── validate.js               # Input validation, SSRF protection, rate limiting
-│   ├── settings.js               # Global settings (poll interval, default LLM port, auto-hide)
-│   ├── secretsStore.js           # AES-256-GCM encrypted SSH password persistence
-│   ├── sparks/
-│   │   ├── SparkRegistry.js      # CRUD for sparks.json + change events
-│   │   └── SparkMonitor.js       # Per-Spark poll loops + rate tracking
-│   ├── util/
-│   │   └── atomicWrite.js        # Atomic (tmp + rename) file writes
-│   └── collectors/
-│       ├── SystemCollector.js    # GPU, CPU, RAM, storage, network, unified memory
-│       ├── LlmProbe.js           # LLM backend auto-detection + live tok/s
-│       └── ssh.js                # SSH exec (key + sshpass)
-├── config/                       # Runtime config (Docker volume)
-│   ├── sparks.json               # Spark registry (gitignored)
-│   ├── sparks-secrets.json       # Encrypted SSH passwords (gitignored)
-│   ├── settings.json             # Global settings (gitignored)
-│   └── .secrets-key              # Encryption key (gitignored)
-├── Dockerfile                    # Multi-stage arm64 production build
-├── Dockerfile.dev                # Development with live reload
-├── docker-compose.yml            # Production compose
-├── docker-compose.dev.yml        # Development compose (source mount, HMR)
-├── deploy.sh                     # Deploy/refresh script
-└── .env.example                  # Environment variable template
+├── src/                 React + TypeScript SPA
+│   ├── api/             REST client + shared types
+│   ├── components/      Overview, Spark pages, dialogs, UI primitives
+│   ├── hooks/           WebSocket snapshot, routing
+│   └── theme / CSS      Tailwind v4 + four themes
+├── server/              Express + WebSocket (plain JS ESM)
+│   ├── sparks/          SparkRegistry, SparkMonitor
+│   ├── collectors/      SystemCollector, LlmProbe, ssh
+│   ├── secretsStore.js  Encrypted password persistence
+│   └── validate.js      Host/user validation (SSRF-minded)
+├── config/              Runtime state (volume; secrets gitignored)
+├── assets/              Screenshots
+├── Dockerfile           Production multi-stage arm64
+├── docker-compose.yml   Production
+├── docker-compose.dev.yml
+└── deploy.sh            Rebuild / recreate helpers
 ```
+
+For a deeper map of modules and invariants, see [CODEBASE.md](./CODEBASE.md).
 
 ---
 
-## 🌐 REST API
+## REST API
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/sparks` | List all Sparks (passwords redacted) |
-| POST | `/api/sparks` | Add a Spark (starts its monitor) |
-| PATCH | `/api/sparks/:id` | Update a Spark (hot-swaps config) |
-| DELETE | `/api/sparks/:id` | Remove a Spark (drains its monitor) |
-| PUT | `/api/sparks/order` | Reorder Sparks (persisted) |
+| GET | `/api/sparks` | List Sparks (passwords redacted) |
+| POST | `/api/sparks` | Add Spark and start its monitor |
+| PATCH | `/api/sparks/:id` | Update Spark (hot-swap config) |
+| DELETE | `/api/sparks/:id` | Remove Spark and drain monitor |
+| PUT | `/api/sparks/order` | Persist tab order |
 | GET | `/api/sparks/:id/metrics` | One-shot metrics snapshot |
 | POST | `/api/sparks/test` | Ephemeral SSH + LLM test (no persist) |
-| POST | `/api/sparks/:id/test` | Test SSH + LLM connectivity (saves password) |
-| PUT | `/api/sparks/:id/password` | Save SSH password (works while host offline) |
-| PUT | `/api/sparks/:id/disabled-devices` | Disable storage devices (hot) |
-| PUT | `/api/sparks/:id/disabled-interfaces` | Disable network interfaces (hot) |
-| PUT | `/api/sparks/:id/llm-port` | Update LLM probe port (hot) |
-| GET | `/api/settings` | Get global settings |
+| POST | `/api/sparks/:id/test` | Connectivity test (can save password) |
+| PUT | `/api/sparks/:id/password` | Save SSH password (works offline) |
+| PUT | `/api/sparks/:id/disabled-devices` | Hide storage devices (hot) |
+| PUT | `/api/sparks/:id/disabled-interfaces` | Hide network interfaces (hot) |
+| PUT | `/api/sparks/:id/llm-port` | LLM probe port (hot) |
+| GET | `/api/settings` | Global settings |
 | PUT | `/api/settings` | Update global settings |
 | WS | `/ws` | Real-time metrics stream |
 
+There is no authentication on the HTTP/WebSocket API. Run sparkDash only on a trusted network (or behind your own reverse proxy with auth).
+
 ---
 
-## ⚙️ Configuration
+## Configuration
 
-### Global Settings
+### Global settings (UI or API)
 
-Configured via the gear icon in the dashboard header or the REST API:
+Gear icon in the header, or `GET`/`PUT` `/api/settings`:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Poll interval | 2000 ms | WebSocket broadcast interval (clamped ≥ 1000 ms) |
-| Default LLM port | 8888 | Default port for LLM probing on new Sparks |
-| Auto-hide offline | false | Hide offline Sparks from the overview grid |
+| Poll interval | 2000 ms | WebSocket broadcast interval (minimum 1000 ms) |
+| Default LLM port | 8888 | Default for new Sparks |
+| Auto-hide offline | false | Hide offline Sparks on Overview |
 
-### Environment Variables
+### Environment variables
 
-Copy `.env.example` to `.env` and customize:
+Copy `.env.example` to `.env` if needed:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | 5555 | Express server port |
-| `LLM_PORT` | 8888 | Default LLM probe port |
-| `POLL_INTERVAL_GPU` | 2000 | GPU polling interval (ms) |
-| `POLL_INTERVAL_CPU` | 2000 | CPU polling interval (ms) |
-| `POLL_INTERVAL_NETWORK` | 2000 | Network polling interval (ms) |
-| `POLL_INTERVAL_STORAGE` | 5000 | Storage polling interval (ms) |
-| `POLL_INTERVAL_LLM` | 2000 | LLM probing interval (ms) |
-| `POLL_INTERVAL_BANDWIDTH` | 1000 | Memory bandwidth sampling interval (ms) |
+| `PORT` | `5555` | HTTP + WebSocket listen port |
+| `LLM_PORT` | `8888` | Default LLM probe port |
+| `POLL_INTERVAL_GPU` | `2000` | GPU poll (ms) |
+| `POLL_INTERVAL_CPU` | `2000` | CPU / RAM poll (ms) |
+| `POLL_INTERVAL_NETWORK` | `2000` | Network poll (ms) |
+| `POLL_INTERVAL_STORAGE` | `5000` | Storage poll (ms) |
+| `POLL_INTERVAL_LLM` | `2000` | LLM probe poll (ms) |
+| `POLL_INTERVAL_BANDWIDTH` | `2000` | Memory bandwidth / dmon poll (ms) |
+| `POLL_INTERVAL_LIVENESS` | `5000` | Online/SSH liveness check (ms) |
+| `SPARKDASH_SECRETS_KEY` | _(auto)_ | Passphrase or 64-char hex for secret encryption |
+| `HOST_PROC_PATH` | `/host/proc` | Host proc mount inside container |
+| `HOST_SYS_PATH` | `/host/sys` | Host sys mount |
+| `HOST_ROOT_PATH` | `/host/root` | Host root mount |
 
 ### Adding a Spark
 
-1. Click the **+** tab in the header.
-2. Fill in: **Name**, **LAN IP** (required), **CX7 IP** (optional), **SSH user**, and **auth method** (key or password).
-3. Use the **Test Connection** button to verify SSH + LLM reachability.
-4. Save — a new tab appears and begins streaming metrics immediately.
+1. Open the **+** tab.
+2. Set **Name**, **LAN IP** (required), optional **CX7 IP**, **SSH user**, and auth (key or password).
+3. **Test Connection** for SSH + LLM reachability.
+4. Save — a tab appears and metrics start streaming.
 
 ### Themes
 
-Click the theme toggle in the header (sun/moon icon) to cycle through:
+Header theme control cycles:
 
-| Theme | Description |
-|-------|-------------|
-| **Dark** (default) | Pure neutral grays, true black base, zero blue component. Muted amber accent. |
-| **Light** | Warm paper whites, amber accent. |
-| **White** | Cool neutral whites, no warm tones. |
-| **OLED** | True black background for maximum contrast on OLED displays. |
+| Theme | Notes |
+|-------|--------|
+| **Dark** (default) | Neutral grays, true black base, muted amber accent |
+| **Light** | Warm paper whites |
+| **White** | Cool neutral whites |
+| **OLED** | True black for OLED panels |
 
-Themes persist to `localStorage` across sessions.
-
----
-
-## 🔒 Security
-
-- **SSH passwords are never stored in `sparks.json`** and are **never returned by any API endpoint**.
-- Passwords are encrypted with **AES-256-GCM** and persisted to `config/sparks-secrets.json`. They survive Docker restarts.
-- The encryption key lives in `config/.secrets-key` (auto-generated) or can be set via the `SPARKDASH_SECRETS_KEY` environment variable. **Never delete this file** — it would orphan all encrypted secrets.
-- **SSRF protection**: input validation blocks link-local and metadata IP addresses (169.254.x.x, 127.x.x.x, 10.0.0.1/8, 172.16-31.x.x, 192.168.x.x are allowed; 0.0.0.0/8, 100.x.x.x, fe80::/10 are blocked).
-- All SSH/HTTP calls use short timeouts (3s HTTP, 5s SSH connect timeout) to avoid hanging the poll loop.
-- **Prefer SSH key authentication** over password-based auth.
+Choice is stored in `localStorage`.
 
 ---
 
-## 🐳 Docker
+## Security
+
+- **SSH passwords** are not stored in `sparks.json` and are never returned by the API.
+- Passwords are encrypted with **AES-256-GCM** in `config/sparks-secrets.json` (survives restarts).
+- Encryption key: `config/.secrets-key` (auto-generated) or `SPARKDASH_SECRETS_KEY`. **Do not delete the key file** or encrypted secrets become unreadable.
+- **Target validation** rejects clearly unsafe IPv4 targets (link-local `169.254.0.0/16`, `0.0.0.0/8`, multicast/reserved ≥ 224). Private, loopback, and public addresses are allowed so LAN and remote Sparks work.
+- SSH and HTTP probes use short timeouts (about 5 s SSH connect, 3 s HTTP) so a hung host cannot stall the poll loop.
+- Prefer **SSH keys** over passwords.
+- Treat the dashboard as **LAN-trusted**: the API is intentionally unauthenticated for ease of use on a private network.
+
+---
+
+## Docker
 
 ### Production
 
 ```bash
 docker compose up --build -d
+# or
+./deploy.sh --build
+# rebuild frontend on host (dist is mounted), then recreate:
+./deploy.sh --frontend
 ```
 
-The production compose configuration:
-- Builds an arm64 multi-stage image
-- Mounts `/proc`, `/sys`, and `/` (read-only) for local Spark metrics
-- Mounts `nvidia-smi` and CUDA driver libraries for GPU metrics
-- Persists `config/` as a volume (survives container recreation)
-- Runs with `privileged: true` (required for nsenter-based host metric access)
-- Auto-restarts on crash (`restart: unless-stopped`)
-- Uses `node --watch` for server-side file change reloads
+Compose highlights:
 
-### Development
+- arm64 multi-stage image
+- Host mounts: `/proc`, `/sys`, `/` (read-only) for local metrics
+- `nvidia-smi` and driver libs bind-mounted for GPU queries
+- `./config` and `./dist` volumes; `./server` mounted with `node --watch` for server-side reloads without image rebuild
+- `privileged: true` (nsenter / host metric access)
+- `restart: unless-stopped`
+
+### Development Compose
 
 ```bash
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-Source-mounted with Vite HMR for frontend development.
+Source-mounted with Vite HMR for frontend work.
 
 ---
 
-## 📜 Scripts
+## Scripts
 
 | Command | Purpose |
 |---------|---------|
-| `npm run dev` | Development: concurrent Vite (5173) + Express (5555) with hot reload |
-| `npm run dev:server` | Express only with `node --watch` |
-| `npm run dev:client` | Vite dev server only |
-| `npm run build` | Build frontend to `dist/` |
-| `npm start` | Production: `node server/index.js` |
+| `npm run dev` | Vite (5173) + Express (5555) together |
+| `npm run dev:server` | Express only (`node --watch`) |
+| `npm run dev:client` | Vite only |
+| `npm run build` | Production frontend → `dist/` |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm start` | Production server (`node server/index.js`) |
 | `npm run docker:up` | `docker compose up -d` |
-| `npm run docker:dev` | Docker dev compose |
-| `npm run docker:prod` | Docker production compose |
-| `npm run docker:rebuild` | Docker compose up --build -d |
-| `./deploy.sh` | Deploy/refresh container (--build, --frontend flags) |
+| `npm run docker:prod` | Same as `docker:up` |
+| `npm run docker:rebuild` | `docker compose up --build -d` |
+| `npm run docker:dev` | Dev Compose |
+| `npm run docker:dev:build` | Dev Compose with rebuild |
+| `./deploy.sh` | Recreate container; `--build`, `--frontend` flags |
 
 ---
 
-## 🧠 Architecture Highlights
+## How it works
 
-### Local vs. Remote Sparks
+### Local vs remote Sparks
 
-The same `SystemCollector` code handles both local and remote Sparks. When `spark.isLocal` is `true`, metrics are read directly via sysfs, procfs, and `nvidia-smi` (using nsenter into the host namespace). For remote Sparks, every command is wrapped in SSH via the centralized `sshExec()` helper.
+One `SystemCollector` path for both modes. When `spark.isLocal` is true, metrics come from host sysfs/proc and `nvidia-smi` (often via nsenter into the host namespace). Remote Sparks wrap the same commands in a shared `sshExec()` helper (key agent or `sshpass`).
 
-### Graceful Degradation
+### Graceful degradation
 
-All collectors catch errors and return default/zero metrics rather than crashing the poll loop. A Spark is marked `online: false` after 10 seconds of failed liveness checks. The frontend handles offline Sparks gracefully, showing stale data or placeholder states.
+Collectors catch errors and return zero/default metrics instead of crashing the loop. After sustained liveness failures, a Spark is marked offline; the UI shows stale or empty states rather than hard errors.
 
-### Hot Configuration Updates
+### Hot configuration
 
-Editing a Spark's config (name, IP, SSH credentials) or LLM port updates the running `SparkMonitor` without tearing down its poll loops or losing rate baselines. Config changes are atomic — written to a temp file and renamed into place.
+Name, IP, SSH credentials, LLM port, and device/interface filters update the running `SparkMonitor` without tearing down poll loops or losing rate baselines. Registry writes are atomic (temp file + rename).
 
-### LLM Probe
+### LLM probe
 
-The `LlmProbe` auto-detects the running LLM backend:
-- **llama.cpp** — detected via `/slots` endpoint; extracts model name from `/props`, computes live tok/s from per-slot decoded token diffs.
-- **vLLM / sglang** — detected via `/v1/models`; sglang identified from `/get_server_info`, vLLM from Prometheus `/metrics` counters. Cumulative token counters are diffed against per-Spark baselines for live rates.
-- Scientific notation in Prometheus values (e.g., `2.508e+06`) is handled correctly.
+`LlmProbe` auto-detects backends:
 
----
+- **llama.cpp** — `/slots` for live decode rates; model from `/props`
+- **vLLM / sglang** — `/v1/models`; sglang via `/get_server_info`, vLLM via Prometheus `/metrics` counters (scientific notation supported)
 
-## 🤝 Contributing
-
-Contributions are welcome! Please read through the existing code — the project follows ESM throughout, plain JavaScript on the server, TypeScript on the frontend.
+Rates are derived from per-Spark cumulative counter diffs.
 
 ---
 
-## 📄 License
+## Contributing
 
-MIT License — see [LICENSE](./LICENSE) for details.
+Contributions are welcome. Conventions:
+
+- **Server**: plain JavaScript ESM
+- **Client**: TypeScript + React
+- Prefer extending the shared Spark model over per-unit special cases
+
+See [AGENTS.md](./AGENTS.md) and [CODEBASE.md](./CODEBASE.md) for project invariants.
 
 ---
 
-## 🙏 Acknowledgements
+## License
 
-- Built for the **NVIDIA DGX Spark (GB10)** platform on ARM64
-- Inspired by a legacy monitoring dashboard — rebuilt with proper architecture (no copy-paste Spark-numbering)
-- LLM probe logic ported and refined from battle-tested production code
+[MIT](./LICENSE) — Copyright (c) 2026 Mia'a AI Lab
+
+---
+
+## Acknowledgements
+
+- Built for the **NVIDIA DGX Spark (GB10)** on ARM64
+- Rebuilt from a legacy multi-unit dashboard with a single shared Spark model (no copy-pasted “Spark N” code paths)
+- LLM probe behavior refined from production monitoring experience

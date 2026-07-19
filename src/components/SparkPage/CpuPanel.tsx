@@ -55,7 +55,7 @@ export function CpuPanel({ cpu, ram, unifiedMemory }: CpuPanelProps) {
   const ramAvail = ramTotal > 0 ? ramTotal - ramUsed : 0;
 
   return (
-    <Panel title="CPU" icon={<CpuIcon />} className="panel-cpu" bodyClassName="space-y-3">
+    <Panel title="CPU" icon={<CpuIcon />} className="panel-cpu" bodyClassName="space-y-3" accent>
       <MetricRow
         label="Usage"
         color="var(--color-accent)"
