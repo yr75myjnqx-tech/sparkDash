@@ -1,5 +1,6 @@
 {
   "pollIntervalMs": 2000,
   "defaultLlmPort": 8888,
-  "autoHideOffline": false
+  "autoHideOffline": false,
+  "temperatureUnit": "celsius"
 }
