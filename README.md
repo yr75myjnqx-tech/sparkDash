@@ -13,17 +13,10 @@ sparkDash is a real-time web dashboard for one or more **NVIDIA DGX Spark (GB10)
 
 <img src="./assets/screenshot.png" alt="sparkDash Overview page with multiple DGX Spark units, GPU metrics, and LLM status" width="800">
 
-<!-- GitHub markdown CSS draws table borders; force them off with !important -->
-<table border="0" cellspacing="0" cellpadding="0" style="border:none !important;border-collapse:collapse !important;box-shadow:none !important;">
-  <tr style="border:none !important;">
-    <td valign="middle" style="border:none !important;padding:6px 13px 6px 0 !important;background:transparent !important;">
-      <a href="https://x.com/MiaAI_lab" target="_blank"><img src="https://img.shields.io/badge/Follow%20me%20on%20X-000000?style=for-the-badge&logo=x&logoColor=white" alt="Follow Mia on X" height="36" /></a>
-    </td>
-    <td valign="middle" style="border:none !important;padding:6px 13px 6px 0 !important;background:transparent !important;">
-      <a href="https://ko-fi.com/Z8Z3SPLOD" target="_blank"><img src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" alt="Buy Me a Coffee at ko-fi.com" height="36" border="0" /></a>
-    </td>
-  </tr>
-</table>
+<!-- Avoid <table>: GitHub markdown always paints cell borders. Same line + vertical-align. -->
+<p style="margin:6px 0;">
+  <a href="https://x.com/MiaAI_lab" target="_blank" style="display:inline-block;margin:0 13px 0 0;vertical-align:middle;"><img src="https://img.shields.io/badge/Follow%20me%20on%20X-000000?style=for-the-badge&logo=x&logoColor=white" alt="Follow Mia on X" height="36" style="vertical-align:middle;border:0;" /></a><a href="https://ko-fi.com/Z8Z3SPLOD" target="_blank" style="display:inline-block;margin:0 13px 0 0;vertical-align:middle;"><img src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" alt="Buy Me a Coffee at ko-fi.com" height="36" border="0" style="vertical-align:middle;border:0;" /></a>
+</p>
 
 ---
 
