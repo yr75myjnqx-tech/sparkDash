@@ -152,7 +152,7 @@ export async function sshTest(spark) {
 }
 
 /**
- * Test LLM server connectivity.
+ * Test LLM server connectivity on a single port.
  * Returns { ok: boolean, message: string }
  *
  * `port` is required at call sites today (both pass `resolveLlmPort(spark)`).
@@ -168,7 +168,7 @@ export async function llmTest(spark, port) {
     const resolvedPort =
       Number.isInteger(port) && port >= 1 && port <= 65535
         ? port
-        : Number(spark?.llmPort) || 8888;
+        : Number(spark?.llmPorts?.[0] || spark?.llmPort) || 8888;
     const url = `http://${host}:${resolvedPort}/v1/models`;
     const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
     const data = await res.json();
@@ -176,4 +176,20 @@ export async function llmTest(spark, port) {
   } catch (err) {
     return { ok: false, message: err.message };
   }
+}
+
+/**
+ * Test LLM connectivity on all configured ports.
+ * Returns { ok: boolean, ports: { port, ok, message }[] }
+ */
+export async function llmTestAll(spark) {
+  const ports = spark.llmPorts || (spark.llmPort ? [spark.llmPort] : [8888]);
+  const results = await Promise.all(
+    ports.map(async (port) => {
+      const result = await llmTest(spark, port);
+      return { port, ...result };
+    })
+  );
+  const allOk = results.every((r) => r.ok);
+  return { ok: allOk, ports: results };
 }

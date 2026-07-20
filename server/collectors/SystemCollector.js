@@ -142,11 +142,18 @@ export class SystemCollector {
     systemDraw += 20; // CX7 NIC + peripherals estimate
     systemDraw = Math.round(systemDraw);
 
+    // Top 5 GPU processes by VRAM usage
+    const processes = Array.from(this.nvidiaComputeAppsCache.entries())
+      .map(([pid, info]) => ({ pid, name: info.name, vramMB: info.vramMB }))
+      .sort((a, b) => b.vramMB - a.vramMB)
+      .slice(0, 5);
+
     return {
       temperature: gpu.temperature,
       usage: gpu.usage,
       power: { draw: gpu.powerDraw, limit: gpu.powerLimit, systemDraw },
       vram,
+      processes,
     };
   }
 
@@ -188,13 +195,13 @@ export class SystemCollector {
           computeOut != null
             ? computeOut
             : await this._nvidiaSmi(
-                "--query-compute-apps=pid,used_gpu_memory --format=csv,noheader,nounits"
+                "--query-compute-apps=pid,process_name,used_gpu_memory --format=csv,noheader,nounits"
               );
         const apps = this._parseComputeApps(raw);
         this.nvidiaComputeAppsCache.clear();
         let sum = 0;
         for (const app of apps) {
-          this.nvidiaComputeAppsCache.set(app.pid, app.vramMB);
+          this.nvidiaComputeAppsCache.set(app.pid, { name: app.name, vramMB: app.vramMB });
           sum += app.vramMB;
         }
         if (sum > 0) used = sum;
@@ -251,7 +258,12 @@ export class SystemCollector {
     return lines
       .map((line) => {
         const parts = line.split(",").map((s) => s.trim());
-        return { pid: parseInt(parts[0]) || 0, vramMB: this._parseSmiNumber(parts[1]) || 0 };
+        // Format: pid,process_name,used_gpu_memory
+        return {
+          pid: parseInt(parts[0]) || 0,
+          name: parts[1] || "unknown",
+          vramMB: this._parseSmiNumber(parts[2]) || 0,
+        };
       })
       .filter((a) => a.pid > 0);
   }
@@ -752,7 +764,7 @@ export class SystemCollector {
         "echo '---'",
         "nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits 2>/dev/null",
         "echo '---'",
-        "nvidia-smi --query-compute-apps=pid,used_gpu_memory --format=csv,noheader,nounits 2>/dev/null",
+        "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory --format=csv,noheader,nounits 2>/dev/null",
         "echo '---'",
         "grep -E 'MemTotal|MemAvailable' /proc/meminfo 2>/dev/null",
       ].join("; ");
@@ -778,7 +790,7 @@ export class SystemCollector {
       this.nvidiaComputeAppsCache.clear();
       let computeSum = 0;
       for (const app of apps) {
-        this.nvidiaComputeAppsCache.set(app.pid, app.vramMB);
+        this.nvidiaComputeAppsCache.set(app.pid, { name: app.name, vramMB: app.vramMB });
         computeSum += app.vramMB;
       }
       if ((used == null || used === 0) && computeSum > 0) used = computeSum;
@@ -803,11 +815,18 @@ export class SystemCollector {
       // Rough system power estimate: GPU draw + 20W CX7/peripherals
       const systemDraw = Math.round(gpu.powerDraw + 20);
 
+      // Top 5 GPU processes by VRAM usage
+      const processes = Array.from(this.nvidiaComputeAppsCache.entries())
+        .map(([pid, info]) => ({ pid, name: info.name, vramMB: info.vramMB }))
+        .sort((a, b) => b.vramMB - a.vramMB)
+        .slice(0, 5);
+
       return {
         temperature: gpu.temperature,
         usage: gpu.usage,
         power: { draw: gpu.powerDraw, limit: gpu.powerLimit, systemDraw },
         vram: { used: usedMB, total: totalMB, percentage, available: availableMB },
+        processes,
       };
     } catch (err) {
       console.error(`[SystemCollector] Remote GPU error for ${this.spark.id}:`, err.message);
@@ -1038,7 +1057,7 @@ export class SystemCollector {
       const cmd = [
         "grep -E 'MemTotal|MemAvailable' /proc/meminfo 2>/dev/null",
         "echo '---'",
-        "nvidia-smi --query-compute-apps=pid,used_gpu_memory --format=csv,noheader,nounits 2>/dev/null",
+        "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory --format=csv,noheader,nounits 2>/dev/null",
       ].join("; ");
 
       const output = await sshExec(this.spark, cmd);
@@ -1052,12 +1071,12 @@ export class SystemCollector {
       const availKB = availMatch ? parseInt(availMatch[1]) : 0;
       const totalMB = Math.round(totalKB / 1024);
 
-      // GPU memory from nvidia-smi compute apps
+      // GPU memory from nvidia-smi compute apps (pid,process_name,used_gpu_memory)
       let gpuUsedMB = 0;
       const computeApps = computeOut.trim().split("\n").filter(Boolean);
       for (const line of computeApps) {
         const parts = line.split(",").map((s) => s.trim());
-        const vramMB = parseFloat(parts[1]) || 0;
+        const vramMB = parseFloat(parts[2]) || 0;
         gpuUsedMB += vramMB;
       }
       gpuUsedMB = Math.round(gpuUsedMB);
@@ -1207,6 +1226,7 @@ export class SystemCollector {
       usage: 0,
       power: { draw: 0, limit: 120, systemDraw: 0 },
       vram: { used: 0, total: 0, percentage: 0, available: 0 },
+      processes: [],
     };
   }
 

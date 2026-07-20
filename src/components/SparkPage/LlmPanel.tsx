@@ -9,7 +9,8 @@ interface LlmPanelProps {
   llm: LlmMetrics | null;
   sparkId: string;
   llmPort: number;
-  onLlmPortChange: (port: number) => void;
+  llmPortsCount?: number;
+  onRemovePort?: (port: number) => void;
   className?: string;
 }
 
@@ -32,7 +33,7 @@ function BackendBadge({ backend }: { backend: string | null }) {
   );
 }
 
-export function LlmPanel({ llm, sparkId, llmPort, onLlmPortChange, className }: LlmPanelProps) {
+export function LlmPanel({ llm, sparkId, llmPort, llmPortsCount = 1, onRemovePort, className }: LlmPanelProps) {
   const [genHistory, setGenHistory] = useState<number[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [portDraft, setPortDraft] = useState(String(llmPort));
@@ -88,7 +89,7 @@ export function LlmPanel({ llm, sparkId, llmPort, onLlmPortChange, className }: 
     setSaveError(null);
     try {
       await updateLlmPort(sparkId, parsedPort);
-      onLlmPortChange(parsedPort);
+      // Port change will sync via WS broadcast — no local callback needed
       setShowSettings(false);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to save port");
@@ -105,6 +106,16 @@ export function LlmPanel({ llm, sparkId, llmPort, onLlmPortChange, className }: 
       className={`panel-llm ${className}`}
       actions={
         <div className="flex items-center gap-1.5">
+          {llmPortsCount > 1 && onRemovePort && (
+            <button
+              type="button"
+              title={`Remove port ${llmPort}`}
+              onClick={() => onRemovePort(llmPort)}
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-danger transition-colors hover:bg-danger/10"
+            >
+              ×
+            </button>
+          )}
           <button
             type="button"
             title={showSettings ? "Done" : "LLM settings"}
@@ -214,7 +225,7 @@ export function LlmPanel({ llm, sparkId, llmPort, onLlmPortChange, className }: 
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 border-t border-border pt-3">
+          <div className="grid grid-cols-4 gap-2 border-t border-border pt-3">
             <div className="space-y-0.5">
               <div className="text-[10px] uppercase tracking-wide text-muted">Slots</div>
               <div className="font-tabular text-sm text-text">
@@ -277,6 +288,14 @@ export function LlmPanel({ llm, sparkId, llmPort, onLlmPortChange, className }: 
                   ? llm.gpuMemoryUtilization === 0
                     ? "Sleeping"
                     : "Active"
+                  : "—"}
+              </div>
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-[10px] uppercase tracking-wide text-muted">Total Generated</div>
+              <div className="font-tabular text-sm text-text">
+                {llm && llm.totalOutputTokens > 0
+                  ? llm.totalOutputTokens.toLocaleString()
                   : "—"}
               </div>
             </div>

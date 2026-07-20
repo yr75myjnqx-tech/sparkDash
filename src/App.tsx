@@ -18,15 +18,17 @@ function placeholderSnapshot(
   name: string,
   disabledDevices: string[] = [],
   disabledInterfaces: string[] = [],
-  llmPort = 8888
+  llmPorts: number[] = [8888]
 ): SparkSnapshot {
   return {
     id,
     name,
     online: false,
+    uptime: null,
     disabledDevices,
     disabledInterfaces,
-    llmPort,
+    llmPort: llmPorts[0] ?? 8888,
+    llmPorts,
     hardware: {
       device: "NVIDIA DGX Spark",
       cpuModel: "…",
@@ -43,7 +45,7 @@ function placeholderSnapshot(
       storage: [],
       network: null,
       unifiedMemory: null,
-      llm: null,
+      llm: [],
     },
   };
 }
@@ -117,7 +119,7 @@ function App() {
             c.name,
             c.disabledDevices || [],
             c.disabledInterfaces || [],
-            c.llmPort ?? 8888
+            c.llmPorts ?? (c.llmPort ? [c.llmPort] : [8888])
           );
         })
       );

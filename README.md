@@ -39,8 +39,11 @@ sparkDash is a real-time web dashboard for one or more **NVIDIA DGX Spark (GB10)
 | **Multi-unit** | Any number of Sparks; each has a tabbed detail page plus a shared Overview |
 | **Live streaming** | WebSocket metrics with configurable poll intervals |
 | **Local + remote** | Host metrics via sysfs/proc/`nvidia-smi`; remotes over SSH (key or password) |
-| **LLM probe** | Auto-detects llama.cpp, vLLM, or sglang on port 8888 (configurable); live tok/s |
-| **Unified memory** | GB10 128 GB LPDDR5X pool (~273 GB/s), GPU/CPU split, bandwidth via `nvidia-smi dmon` |
+| **LLM probe** | Auto-detects llama.cpp, vLLM, or sglang; live tok/s per server |
+| **Multiple LLM ports** | Monitor several LLM servers on different ports simultaneously — each gets its own panel with independent backend detection and metrics |
+| **GPU processes** | See the top GPU processes by VRAM usage directly in the GPU panel, including process name and memory allocation |
+| **Spark uptime** | System uptime displayed inline on each Spark header for at-a-glance availability |
+| **Unified memory** | GB10 128 GB LPDDR5X pool (~273 GB/s), GPU/CPU split, bandwidth via `nvidia-smi dmon` |
 | **Themes** | Dark, light, cool white, OLED — neutral palettes, persisted in `localStorage` |
 | **Secrets** | SSH passwords AES-256-GCM encrypted; never in `sparks.json` or API responses |
 | **Docker-first** | Single privileged container for host metrics; prod and dev Compose files |
@@ -156,7 +159,10 @@ sparkDash/
 | PUT | `/api/sparks/:id/password` | Save SSH password (works offline) |
 | PUT | `/api/sparks/:id/disabled-devices` | Hide storage devices (hot) |
 | PUT | `/api/sparks/:id/disabled-interfaces` | Hide network interfaces (hot) |
-| PUT | `/api/sparks/:id/llm-port` | LLM probe port (hot) |
+| PUT | `/api/sparks/:id/llm-ports` | Replace all LLM ports (hot) |
+| POST | `/api/sparks/:id/llm-ports` | Add an LLM port (hot) |
+| DELETE | `/api/sparks/:id/llm-ports/:port` | Remove an LLM port (hot) |
+| PUT | `/api/sparks/:id/llm-port` | LLM port — backward-compat (hot) |
 | GET | `/api/settings` | Global settings |
 | PUT | `/api/settings` | Update global settings |
 | WS | `/ws` | Real-time metrics stream |
@@ -267,12 +273,12 @@ Name, IP, SSH credentials, LLM port, and device/interface filters update the run
 
 ### LLM probe
 
-`LlmProbe` auto-detects backends:
+Each configured LLM port gets its own `LlmProbe` instance running in parallel. Probes auto-detect backends:
 
 - **llama.cpp** — `/slots` for live decode rates; model from `/props`
 - **vLLM / sglang** — `/v1/models`; sglang via `/get_server_info`, vLLM via Prometheus `/metrics` counters (scientific notation supported)
 
-Rates are derived from per-Spark cumulative counter diffs.
+Rates are derived from per-probe cumulative counter diffs. Multiple ports can be added or removed at runtime without restarting the monitor.
 
 ---
 

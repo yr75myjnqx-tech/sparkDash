@@ -126,11 +126,44 @@ export function runLlmBench(id: string): Promise<BenchResult> {
   return apiFetch(`/api/sparks/${id}/llm/bench`, { method: "POST" });
 }
 
-// ─── LLM probe port (per Spark) ───────────────────────────
+// ─── LLM probe ports (per Spark) ─────────────────────────
+/** Replace all LLM ports for a Spark (hot update). */
+export function updateLlmPorts(
+  id: string,
+  llmPorts: number[]
+): Promise<{ success: boolean; llmPorts: number[] }> {
+  return apiFetch(`/api/sparks/${id}/llm-ports`, {
+    method: "PUT",
+    body: JSON.stringify({ llmPorts }),
+  });
+}
+
+/** Add a single LLM port to a Spark (hot update). */
+export function addLlmPort(
+  id: string,
+  port: number
+): Promise<{ success: boolean; llmPorts: number[] }> {
+  return apiFetch(`/api/sparks/${id}/llm-ports`, {
+    method: "POST",
+    body: JSON.stringify({ port }),
+  });
+}
+
+/** Remove an LLM port from a Spark (hot update). */
+export function removeLlmPort(
+  id: string,
+  port: number
+): Promise<{ success: boolean; llmPorts: number[] }> {
+  return apiFetch(`/api/sparks/${id}/llm-ports/${port}`, {
+    method: "DELETE",
+  });
+}
+
+/** Backward-compat: replace all ports via the legacy single-port endpoint. */
 export function updateLlmPort(
   id: string,
   llmPort: number
-): Promise<{ success: boolean; llmPort: number }> {
+): Promise<{ success: boolean; llmPort: number; llmPorts: number[] }> {
   return apiFetch(`/api/sparks/${id}/llm-port`, {
     method: "PUT",
     body: JSON.stringify({ llmPort }),

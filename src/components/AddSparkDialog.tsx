@@ -24,7 +24,7 @@ const defaultConfig: Omit<SparkConfig, "id"> = {
   lanIp: "",
   cx7Ip: "",
   isLocal: false,
-  llmPort: 8888,
+  llmPorts: [8888],
   ssh: { host: "", user: "zurih", auth: "key" },
 };
 
@@ -37,10 +37,10 @@ export function AddSparkDialog({ open, onClose, onAdded, defaultLlmPort = 8888 }
 
   useEscape(onClose);
 
-  // Pre-fill LLM port from settings when dialog opens
+  // Pre-fill LLM ports from settings when dialog opens
   useEffect(() => {
     if (open) {
-      setConfig((prev) => ({ ...prev, llmPort: defaultLlmPort }));
+      setConfig((prev) => ({ ...prev, llmPorts: [defaultLlmPort] }));
     }
   }, [open, defaultLlmPort]);
 
@@ -156,15 +156,16 @@ export function AddSparkDialog({ open, onClose, onAdded, defaultLlmPort = 8888 }
           </div>
 
           <div>
-            <label className="mb-1 block text-xs text-muted">LLM Port (optional)</label>
+            <label className="mb-1 block text-xs text-muted">LLM Ports (optional, comma-separated)</label>
             <input
-              type="number"
-              min={1}
-              max={65535}
-              value={config.llmPort ?? defaultLlmPort}
+              type="text"
+              value={(config.llmPorts ?? [defaultLlmPort]).join(", ")}
               onChange={(e) => {
-                const val = parseInt(e.target.value, 10);
-                if (!isNaN(val)) update({ llmPort: val });
+                const ports = e.target.value
+                  .split(",")
+                  .map((s) => parseInt(s.trim(), 10))
+                  .filter((n) => Number.isInteger(n) && n >= 1 && n <= 65535);
+                if (ports.length > 0) update({ llmPorts: ports });
               }}
               className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
               placeholder={String(defaultLlmPort)}

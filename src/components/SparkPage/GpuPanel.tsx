@@ -123,6 +123,28 @@ export function GpuPanel({ gpu, temperatureUnit }: GpuPanelProps) {
           )}
         </div>
       )}
+
+      {/* Top GPU processes by VRAM usage */}
+      {gpu && gpu.processes && gpu.processes.length > 0 && (
+        <div className="space-y-1.5 border-t border-border pt-3">
+          <div className="text-[10px] uppercase tracking-wide text-muted">Processes</div>
+          {gpu.processes.map((proc) => (
+            <div key={proc.pid} className="flex items-center justify-between text-xs">
+              <div className="min-w-0 flex-1">
+                <span className="truncate text-text" title={`${proc.name} (PID ${proc.pid})`}>
+                  {proc.name}
+                </span>
+                <span className="ml-1.5 font-tabular text-[10px] text-muted">
+                  {proc.pid}
+                </span>
+              </div>
+              <span className="shrink-0 font-tabular text-text">
+                {formatMb(proc.vramMB)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </Panel>
   );
 }

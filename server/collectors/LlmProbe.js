@@ -34,6 +34,9 @@ export class LlmProbe {
     this.lastTokenCounts = { input: 0, output: 0 };
     this.lastProbeTime = 0;
 
+    // Cumulative total output tokens (generation) as reported by the LLM server
+    this.totalOutputTokens = 0;
+
     this._consecutiveFailures = 0;
     this._lastDetectAt = 0;
   }
@@ -107,6 +110,7 @@ export class LlmProbe {
     this.gpuMemoryUtilization = null;
     this.slotsActive = 0;
     this.slotsTotal = 0;
+    this.totalOutputTokens = 0;
     this.slotState.clear();
     this.lastTokenCounts = { input: 0, output: 0 };
   }
@@ -176,6 +180,7 @@ export class LlmProbe {
           const deltaOut = sgData.total_output_tokens - this.lastTokenCounts.output;
           this.lastTokenCounts.input = sgData.total_input_tokens;
           this.lastTokenCounts.output = sgData.total_output_tokens;
+          this.totalOutputTokens = sgData.total_output_tokens;
           if (dtSec > 0 && dtSec < 10) {
             this.generationTps = Math.max(0, Math.round((deltaOut / dtSec) * 100) / 100);
             this.prefillTps = Math.max(0, Math.round((deltaIn / dtSec) * 100) / 100);
@@ -197,6 +202,7 @@ export class LlmProbe {
             const deltaOut = genTokens - this.lastTokenCounts.output;
             this.lastTokenCounts.input = promptTokens;
             this.lastTokenCounts.output = genTokens;
+            this.totalOutputTokens = genTokens;
             if (dtSec > 0 && dtSec < 10) {
               this.generationTps = Math.max(0, Math.round((deltaOut / dtSec) * 100) / 100);
               this.prefillTps = Math.max(0, Math.round((deltaIn / dtSec) * 100) / 100);
@@ -283,11 +289,13 @@ export class LlmProbe {
 
           let totalGen = 0;
           let totalPrefill = 0;
+          let totalDecoded = 0;
 
           for (const slot of slots) {
             const slotId = slot.id ?? "default";
             const decoded = this._getSlotDecoded(slot);
             const prompted = this._getSlotPrefilled(slot);
+            totalDecoded += decoded;
             const lastState = this.slotState.get(slotId) || { decoded: 0, prompted: 0 };
             const dDecoded = decoded - lastState.decoded;
             const dPrompted = prompted - lastState.prompted;
@@ -298,6 +306,7 @@ export class LlmProbe {
             }
           }
 
+          this.totalOutputTokens = totalDecoded;
           this.generationTps = Math.max(0, Math.round(totalGen * 100) / 100);
           this.prefillTps = Math.max(0, Math.round(totalPrefill * 100) / 100);
         }
@@ -370,6 +379,7 @@ export class LlmProbe {
       slotsTotal: this.slotsTotal,
       generationTps: this.generationTps,
       prefillTps: this.prefillTps,
+      totalOutputTokens: this.totalOutputTokens,
       error: this.error,
     };
   }
@@ -386,6 +396,7 @@ export class LlmProbe {
       slotsTotal: 0,
       generationTps: 0,
       prefillTps: 0,
+      totalOutputTokens: 0,
       error: this.error,
     };
   }

@@ -22,10 +22,19 @@ const LLM_PORT = parseInt(process.env.LLM_PORT || "8888", 10);
 
 /** Per-spark LLM HTTP port (1–65535), else env default. */
 function resolveLlmPort(sparkOrPort) {
-  const raw =
-    sparkOrPort && typeof sparkOrPort === "object"
-      ? sparkOrPort.llmPort
-      : sparkOrPort;
+  if (sparkOrPort && typeof sparkOrPort === "object") {
+    // Prefer llmPorts array, fall back to legacy llmPort
+    const ports = sparkOrPort.llmPorts;
+    if (Array.isArray(ports) && ports.length > 0) {
+      const n = ports[0];
+      if (Number.isInteger(n) && n >= 1 && n <= 65535) return n;
+    }
+    const raw = sparkOrPort.llmPort;
+    const n = typeof raw === "string" ? parseInt(raw, 10) : Number(raw);
+    if (Number.isInteger(n) && n >= 1 && n <= 65535) return n;
+    return LLM_PORT;
+  }
+  const raw = sparkOrPort;
   const n = typeof raw === "string" ? parseInt(raw, 10) : Number(raw);
   if (Number.isInteger(n) && n >= 1 && n <= 65535) return n;
   return LLM_PORT;
@@ -361,7 +370,39 @@ app.put("/api/sparks/:id/disabled-interfaces", (req, res) => {
   }
 });
 
-// Update LLM probe port for a Spark (hot — no monitor restart)
+// Update LLM probe ports for a Spark (hot — no monitor restart)
+app.put("/api/sparks/:id/llm-ports", (req, res) => {
+  try {
+    const spark = registry.getSpark(req.params.id);
+    if (!spark) return res.status(404).json({ error: "Spark not found" });
+
+    const raw = req.body?.llmPorts;
+    if (!Array.isArray(raw)) {
+      return res.status(400).json({ error: "llmPorts must be an array" });
+    }
+    const ports = raw
+      .map((v) => (typeof v === "string" ? parseInt(v, 10) : Number(v)))
+      .filter((n) => Number.isInteger(n) && n >= 1 && n <= 65535);
+    // Deduplicate
+    const unique = [...new Set(ports)];
+    if (unique.length === 0) {
+      return res.status(400).json({ error: "llmPorts must contain at least one valid port 1–65535" });
+    }
+
+    const updated = registry.updateSpark(req.params.id, { llmPorts: unique });
+    const monitor = monitors.get(req.params.id);
+    if (monitor) {
+      monitor.updateConfig(updated);
+    } else {
+      startMonitor(updated);
+    }
+    res.json({ success: true, llmPorts: updated.llmPorts });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Backward-compat: update single LLM port (delegates to llm-ports)
 app.put("/api/sparks/:id/llm-port", (req, res) => {
   try {
     const spark = registry.getSpark(req.params.id);
@@ -373,14 +414,78 @@ app.put("/api/sparks/:id/llm-port", (req, res) => {
       return res.status(400).json({ error: "llmPort must be an integer 1–65535" });
     }
 
-    const updated = registry.updateSpark(req.params.id, { llmPort: n });
+    // Replace the ports list with just this single port
+    const updated = registry.updateSpark(req.params.id, { llmPorts: [n] });
     const monitor = monitors.get(req.params.id);
     if (monitor) {
       monitor.updateConfig(updated);
     } else {
       startMonitor(updated);
     }
-    res.json({ success: true, llmPort: n });
+    res.json({ success: true, llmPort: n, llmPorts: updated.llmPorts });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Add a single LLM port to a Spark (hot — no monitor restart)
+app.post("/api/sparks/:id/llm-ports", (req, res) => {
+  try {
+    const spark = registry.getSpark(req.params.id);
+    if (!spark) return res.status(404).json({ error: "Spark not found" });
+
+    const raw = req.body?.port;
+    const n = typeof raw === "string" ? parseInt(raw, 10) : Number(raw);
+    if (!Number.isInteger(n) || n < 1 || n > 65535) {
+      return res.status(400).json({ error: "port must be an integer 1–65535" });
+    }
+
+    const currentPorts = spark.llmPorts || [];
+    if (currentPorts.includes(n)) {
+      return res.json({ success: true, llmPorts: currentPorts });
+    }
+
+    const updated = registry.updateSpark(req.params.id, { llmPorts: [...currentPorts, n] });
+    const monitor = monitors.get(req.params.id);
+    if (monitor) {
+      monitor.updateConfig(updated);
+    } else {
+      startMonitor(updated);
+    }
+    res.json({ success: true, llmPorts: updated.llmPorts });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Remove an LLM port from a Spark (hot — no monitor restart)
+app.delete("/api/sparks/:id/llm-ports/:port", (req, res) => {
+  try {
+    const spark = registry.getSpark(req.params.id);
+    if (!spark) return res.status(404).json({ error: "Spark not found" });
+
+    const port = parseInt(req.params.port, 10);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      return res.status(400).json({ error: "port must be an integer 1–65535" });
+    }
+
+    const currentPorts = spark.llmPorts || [];
+    const newPorts = currentPorts.filter((p) => p !== port);
+    if (newPorts.length === 0) {
+      return res.status(400).json({ error: "Cannot remove the last LLM port" });
+    }
+    if (newPorts.length === currentPorts.length) {
+      return res.json({ success: true, llmPorts: currentPorts });
+    }
+
+    const updated = registry.updateSpark(req.params.id, { llmPorts: newPorts });
+    const monitor = monitors.get(req.params.id);
+    if (monitor) {
+      monitor.updateConfig(updated);
+    } else {
+      startMonitor(updated);
+    }
+    res.json({ success: true, llmPorts: updated.llmPorts });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

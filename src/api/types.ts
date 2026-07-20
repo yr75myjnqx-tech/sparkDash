@@ -17,8 +17,10 @@ export interface SparkConfig {
   disabledDevices?: string[];
   /** Interface names hidden from the Network panel main view */
   disabledInterfaces?: string[];
-  /** HTTP port for the LLM server on this Spark (default 8888) */
+  /** HTTP port for the LLM server on this Spark (legacy single-port, prefer llmPorts) */
   llmPort?: number;
+  /** HTTP ports for LLM servers on this Spark (default [8888]) */
+  llmPorts?: number[];
   /** When true, storage is only updated on manual refresh, not auto-polled. */
   storagePollDisabled?: boolean;
 }
@@ -51,6 +53,8 @@ export interface GpuMetrics {
     /** MemAvailable in MB — the real free memory in the shared pool. */
     available: number;
   };
+  /** Top GPU processes by VRAM usage (sorted descending, max 5). */
+  processes?: Array<{ pid: number; name: string; vramMB: number }>;
 }
 
 // ─── CPU metrics ─────────────────────────────────────────
@@ -129,6 +133,8 @@ export interface LlmMetrics {
   slotsTotal: number;
   generationTps: number;
   prefillTps: number;
+  /** Cumulative total output (generation) tokens as reported by the LLM server */
+  totalOutputTokens: number;
   error: string | null;
 }
 
@@ -140,7 +146,8 @@ export interface SparkMetrics {
   storage: StorageMetrics[];
   network: NetworkMetrics | null;
   unifiedMemory: UnifiedMemoryMetrics | null;
-  llm: LlmMetrics | null;
+  /** Array of LLM metrics, one per configured port. Empty array when no ports. */
+  llm: LlmMetrics[];
 }
 
 // ─── Spark snapshot (server pushes this) ──────────────────
@@ -148,11 +155,15 @@ export interface SparkSnapshot {
   id: string;
   name: string;
   online: boolean;
+  /** Uptime in seconds, or null when offline */
+  uptime: number | null;
   disabledDevices: string[];
   disabledInterfaces: string[];
   storagePollDisabled?: boolean;
-  /** LLM server port used by the probe for this Spark */
+  /** LLM server port (first port, for backward compat) */
   llmPort: number;
+  /** All LLM server ports configured for this Spark */
+  llmPorts: number[];
   hardware: HardwareInfo;
   metrics: SparkMetrics;
 }

@@ -1,6 +1,8 @@
+import fs from "fs";
+import path from "path";
 import { SystemCollector } from "../collectors/SystemCollector.js";
 import { LlmProbe } from "../collectors/LlmProbe.js";
-import { sshTest } from "../collectors/ssh.js";
+import { sshTest, sshExec } from "../collectors/ssh.js";
 import {
   POLL_INTERVAL_GPU,
   POLL_INTERVAL_CPU,
@@ -10,6 +12,7 @@ import {
   POLL_INTERVAL_BANDWIDTH,
   POLL_INTERVAL_LIVENESS,
   LLM_PORT,
+  HOST_PATHS,
 } from "../config.js";
 
 const ONLINE_GRACE_MS = 10000;
@@ -22,11 +25,19 @@ export class SparkMonitor {
   constructor(spark) {
     this.spark = spark;
     this.collector = new SystemCollector(spark);
-    this.llmProbe = new LlmProbe(spark, this._llmPort());
+
+    // One LlmProbe per port — Map<port, LlmProbe>
+    this.llmProbes = new Map();
+    for (const port of this._llmPorts()) {
+      this.llmProbes.set(port, new LlmProbe(spark, port));
+    }
 
     // Online status from dedicated liveness checks (not metric poll success)
     this.online = false;
     this.lastOnlineOk = 0;
+
+    // System uptime seconds (from /proc/uptime), null when offline
+    this._uptimeSeconds = null;
 
     // Cached metrics per domain — never null objects for UI safety
     this._metrics = {
@@ -36,7 +47,7 @@ export class SparkMonitor {
       storage: [],
       network: this.collector._defaultNetwork(),
       unifiedMemory: this.collector._defaultUnifiedMemory(),
-      llm: this.llmProbe._defaultLlm(),
+      llm: [],
     };
     this._lastUpdate = {};
 
@@ -51,14 +62,35 @@ export class SparkMonitor {
   updateConfig(spark) {
     this.spark = spark;
     this.collector.spark = spark;
-    this.llmProbe.spark = spark;
-    this.llmProbe.setPort(this._llmPort());
+
+    // Rebuild LLM probe map — add new ports, remove stale ones, update existing
+    const ports = this._llmPorts();
+    const prevProbes = this.llmProbes;
+    this.llmProbes = new Map();
+    for (const port of ports) {
+      const existing = prevProbes.get(port);
+      if (existing) {
+        existing.spark = spark;
+        this.llmProbes.set(port, existing);
+      } else {
+        this.llmProbes.set(port, new LlmProbe(spark, port));
+      }
+    }
   }
 
-  _llmPort() {
+  /** Returns array of LLM ports from spark config. */
+  _llmPorts() {
+    const raw = this.spark?.llmPorts;
+    if (Array.isArray(raw)) {
+      const ports = raw
+        .map((v) => (typeof v === "string" ? parseInt(v, 10) : Number(v)))
+        .filter((n) => Number.isInteger(n) && n >= 1 && n <= 65535);
+      return ports.length > 0 ? ports : [LLM_PORT];
+    }
+    // Legacy single port
     const n = Number(this.spark?.llmPort);
-    if (Number.isInteger(n) && n >= 1 && n <= 65535) return n;
-    return LLM_PORT;
+    if (Number.isInteger(n) && n >= 1 && n <= 65535) return [n];
+    return [LLM_PORT];
   }
 
   /** Start background polling. */
@@ -89,14 +121,17 @@ export class SparkMonitor {
 
   /** Return a full snapshot of this Spark's metrics. */
   snapshot() {
+    const ports = this._llmPorts();
     return {
       id: this.spark.id,
       name: this.spark.name,
       online: this.online,
+      uptime: this._uptimeSeconds,
       disabledDevices: this.spark.disabledDevices || [],
       disabledInterfaces: this.spark.disabledInterfaces || [],
       storagePollDisabled: Boolean(this.spark.storagePollDisabled),
-      llmPort: this._llmPort(),
+      llmPort: ports[0] ?? LLM_PORT,
+      llmPorts: ports,
       hardware: this._getHardwareSummary(),
       metrics: {
         // NOTE: no `timestamp` here on purpose. The broadcast path skips
@@ -117,6 +152,21 @@ export class SparkMonitor {
     };
   }
 
+  // ─── Uptime helper ─────────────────────────────────────────
+  /** Read system uptime from /proc/uptime (local or via SSH). */
+  async _readUptime() {
+    let content;
+    if (this.spark.isLocal) {
+      const mapped = path.join(HOST_PATHS.PROC, "uptime");
+      content = fs.readFileSync(mapped, "utf8");
+    } else {
+      content = await sshExec(this.spark, "cat /proc/uptime");
+    }
+    const parts = content.trim().split(/\s+/);
+    const secs = parseFloat(parts[0]);
+    return Number.isFinite(secs) ? Math.floor(secs) : null;
+  }
+
   // ─── Liveness ─────────────────────────────────────────────
   async _checkOnline() {
     if (!this._running || this._inflight.online) return;
@@ -135,10 +185,18 @@ export class SparkMonitor {
       if (!this._running) return;
       this.online = true;
       this.lastOnlineOk = Date.now();
+
+      // Collect system uptime
+      try {
+        this._uptimeSeconds = await this._readUptime();
+      } catch {
+        // Non-fatal — uptime stays at previous value or null
+      }
     } catch {
       if (!this._running) return;
       if (!this.lastOnlineOk || Date.now() - this.lastOnlineOk > ONLINE_GRACE_MS) {
         this.online = false;
+        this._uptimeSeconds = null;
       }
     } finally {
       this._inflight.online = false;
@@ -187,7 +245,10 @@ export class SparkMonitor {
           result = await this.collector.collectUnifiedMemory();
           break;
         case "llm":
-          result = await this.llmProbe.probe();
+          // Probe all ports in parallel
+          result = await Promise.all(
+            Array.from(this.llmProbes.values()).map((probe) => probe.probe())
+          );
           break;
       }
       // Re-check after the await — `stop()`/`updateSpark()` may have torn

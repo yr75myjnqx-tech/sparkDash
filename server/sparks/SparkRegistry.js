@@ -278,7 +278,7 @@ export class SparkRegistry {
       user: sshIn.user || "root",
       auth: sshIn.auth === "pass" ? "pass" : "key",
     };
-    const llmPort = this._normalizeLlmPort(config.llmPort);
+    const llmPorts = this._normalizeLlmPorts(config.llmPorts ?? config.llmPort);
     // Never keep password on the persisted object
     return {
       id: config.id,
@@ -287,17 +287,33 @@ export class SparkRegistry {
       cx7Ip: config.cx7Ip || null,
       isLocal: Boolean(config.isLocal),
       ssh,
-      llmPort,
+      llmPorts,
       disabledDevices: Array.isArray(config.disabledDevices) ? config.disabledDevices : [],
       disabledInterfaces: Array.isArray(config.disabledInterfaces) ? config.disabledInterfaces : [],
       storagePollDisabled: Boolean(config.storagePollDisabled),
     };
   }
 
-  /** Valid port 1–65535, else default LLM_PORT. */
-  _normalizeLlmPort(value) {
+  /** Normalize LLM ports: accepts array or single value, validates 1–65535, deduplicates. */
+  _normalizeLlmPorts(value) {
+    if (Array.isArray(value)) {
+      const ports = value
+        .map((v) => (typeof v === "string" ? parseInt(v, 10) : Number(v)))
+        .filter((n) => Number.isInteger(n) && n >= 1 && n <= 65535);
+      // Deduplicate while preserving order
+      const seen = new Set();
+      const unique = [];
+      for (const p of ports) {
+        if (!seen.has(p)) {
+          seen.add(p);
+          unique.push(p);
+        }
+      }
+      return unique.length > 0 ? unique : [LLM_PORT];
+    }
+    // Legacy single port value
     const n = typeof value === "string" ? parseInt(value, 10) : Number(value);
-    if (Number.isInteger(n) && n >= 1 && n <= 65535) return n;
-    return LLM_PORT;
+    if (Number.isInteger(n) && n >= 1 && n <= 65535) return [n];
+    return [LLM_PORT];
   }
 }

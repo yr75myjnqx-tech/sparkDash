@@ -175,24 +175,35 @@ function SparkCard({ spark, temperatureUnit, onSelect }: { spark: SparkSnapshot;
               }
               return null;
             })()}
-            {spark.metrics.llm?.available && (
-              <MiniStat
-                label={spark.metrics.llm.backend === "vllm" ? "vLLM" : spark.metrics.llm.backend ?? "LLM"}
-                value={spark.metrics.llm.modelId ?? "unknown"}
-                tone="accent"
-                title={spark.metrics.llm.modelId ?? undefined}
-              />
-            )}
+            {(() => {
+              // Find first available LLM for the overview card
+              const llmArr = spark.metrics.llm;
+              const llm = Array.isArray(llmArr) ? llmArr.find((l) => l.available) : null;
+              if (!llm) return null;
+              return (
+                <MiniStat
+                  label={llm.backend === "vllm" ? "vLLM" : llm.backend ?? "LLM"}
+                  value={llm.modelId ?? "unknown"}
+                  tone="accent"
+                  title={llm.modelId ?? undefined}
+                />
+              );
+            })()}
           </div>
 
-          {spark.metrics.llm?.available && (
-            <div className="mt-3.5 border-t border-border pt-3 text-center">
-              <span className="font-tabular text-[28px] font-bold leading-none text-text-strong">
-                {spark.metrics.llm.generationTps.toFixed(0)}
-              </span>
-              <span className="text-sm font-normal text-muted"> tok/s</span>
-            </div>
-          )}
+          {(() => {
+            const llmArr = spark.metrics.llm;
+            const llm = Array.isArray(llmArr) ? llmArr.find((l) => l.available) : null;
+            if (!llm) return null;
+            return (
+              <div className="mt-3.5 border-t border-border pt-3 text-center">
+                <span className="font-tabular text-[28px] font-bold leading-none text-text-strong">
+                  {llm.generationTps.toFixed(0)}
+                </span>
+                <span className="text-sm font-normal text-muted"> tok/s</span>
+              </div>
+            );
+          })()}
         </>
       )}
     </div>
