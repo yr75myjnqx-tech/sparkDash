@@ -19,7 +19,6 @@ sparkDash is a real-time web dashboard for one or more **NVIDIA DGX Spark (GB10)
 
 - [Features](#features)
 - [Quick start](#quick-start)
-- [Docker](#docker)
 - [Architecture](#architecture)
 - [Tech stack](#tech-stack)
 - [Repository layout](#repository-layout)
@@ -63,39 +62,13 @@ npm install
 npm run dev
 ```
 
-- **Docker**: open **http://&lt;host-ip&gt;:5555**
+- **Docker**: open **http://&lt;host-ip&gt;:5555** (arm64 image, auto-restart, host mounts for GPU/metrics access)
 - **Dev**: Vite on **http://localhost:5173** (proxies API/WS to Express)
 
----
-
-## Docker
-
-### Production
-
-```bash
-docker compose up --build -d
-```
-
-Open **http://&lt;host-ip&gt;:5555**.
-
-Config and encrypted secrets live under `./config` (bind-mounted) and survive container recreation.
-
-Compose highlights:
-
-- arm64 multi-stage image
-- Host mounts: `/proc`, `/sys`, `/` (read-only) for local metrics
-- `nvidia-smi` and driver libs bind-mounted for GPU queries
-- `./config` and `./server` mounted for live config and server reloads
-- `privileged: true` (nsenter / host metric access)
-- `restart: unless-stopped`
-
-### Development Compose
-
+For development with Docker (source-mounted, HMR):
 ```bash
 docker compose -f docker-compose.dev.yml up --build
 ```
-
-Source-mounted with Vite HMR for frontend work.
 
 ---
 
