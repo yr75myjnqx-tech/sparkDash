@@ -157,6 +157,35 @@ export function SettingsDialog({ open, onClose, onSaved }: SettingsDialogProps) 
                 Auto-hide offline Sparks on Overview
               </label>
             </div>
+
+            {/* Temperature unit */}
+            <div>
+              <label className="text-xs text-muted">Temperature unit</label>
+              <div className="mt-1.5 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => update({ temperatureUnit: "celsius" })}
+                  className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                    settings.temperatureUnit === "celsius"
+                      ? "bg-accent text-white"
+                      : "border border-border bg-surface-elevated text-muted hover:bg-surface-hover"
+                  }`}
+                >
+                  °C
+                </button>
+                <button
+                  type="button"
+                  onClick={() => update({ temperatureUnit: "fahrenheit" })}
+                  className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                    settings.temperatureUnit === "fahrenheit"
+                      ? "bg-accent text-white"
+                      : "border border-border bg-surface-elevated text-muted hover:bg-surface-hover"
+                  }`}
+                >
+                  °F
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

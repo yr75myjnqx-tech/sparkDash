@@ -10,10 +10,11 @@ import { LlmPanel } from "./LlmPanel";
 
 interface SparkPageProps {
   spark: SparkSnapshot;
+  temperatureUnit: "celsius" | "fahrenheit";
   onEdit?: () => void;
 }
 
-export function SparkPage({ spark, onEdit }: SparkPageProps) {
+export function SparkPage({ spark, temperatureUnit, onEdit }: SparkPageProps) {
   const { metrics } = spark;
   const [disabledDevices, setDisabledDevices] = useState<string[]>(spark.disabledDevices || []);
   const [disabledInterfaces, setDisabledInterfaces] = useState<string[]>(
@@ -64,7 +65,7 @@ export function SparkPage({ spark, onEdit }: SparkPageProps) {
     <div className="space-y-[18px]">
       <SparkHeader spark={spark} onEdit={onEdit} />
       <div className="spark-page grid gap-[18px] md:grid-cols-2">
-        <GpuPanel gpu={metrics.gpu} />
+        <GpuPanel gpu={metrics.gpu} temperatureUnit={temperatureUnit} />
         <CpuPanel cpu={metrics.cpu} ram={metrics.ram} unifiedMemory={metrics.unifiedMemory} />
         <StoragePanel
           storage={metrics.storage}

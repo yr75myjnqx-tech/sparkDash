@@ -180,10 +180,15 @@ function App() {
             <OverviewPage
               sparks={displaySparks}
               hideOffline={settings?.autoHideOffline ?? false}
+              temperatureUnit={settings?.temperatureUnit ?? "celsius"}
               onSelectSpark={navigate}
             />
           ) : displayActive ? (
-            <SparkPage spark={displayActive} onEdit={() => setEditId(displayActive.id)} />
+            <SparkPage
+              spark={displayActive}
+              temperatureUnit={settings?.temperatureUnit ?? "celsius"}
+              onEdit={() => setEditId(displayActive.id)}
+            />
           ) : (
             <div className="panel mx-auto mt-16 max-w-md p-8 text-center">
               <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-accent-soft text-accent">

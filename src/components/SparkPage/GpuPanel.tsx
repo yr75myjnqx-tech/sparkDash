@@ -7,6 +7,11 @@ import { MetricBar } from "../ui/MetricBar";
 
 interface GpuPanelProps {
   gpu: GpuMetrics | null;
+  temperatureUnit: "celsius" | "fahrenheit";
+}
+
+function celsiusToFahrenheit(c: number): number {
+  return Math.round(c * 9 / 5 + 32);
 }
 
 function formatMb(mb: number): string {
@@ -36,11 +41,13 @@ function MetricRow({
   );
 }
 
-export function GpuPanel({ gpu }: GpuPanelProps) {
+export function GpuPanel({ gpu, temperatureUnit }: GpuPanelProps) {
   const [tempHistory, setTempHistory] = useState<number[]>([]);
   const [usageHistory, setUsageHistory] = useState<number[]>([]);
 
   const temperature = gpu?.temperature ?? 0;
+  const displayTemp = temperatureUnit === "fahrenheit" ? celsiusToFahrenheit(temperature) : temperature;
+  const tempLabel = temperatureUnit === "fahrenheit" ? `${displayTemp}°F` : `${displayTemp}°C`;
   const usage = gpu?.usage ?? 0;
   const powerDraw = gpu?.power?.draw ?? 0;
   const powerLimit = gpu?.power?.limit ?? 0;
@@ -79,7 +86,7 @@ export function GpuPanel({ gpu }: GpuPanelProps) {
         label="Temperature"
         color={tempColor}
         spark={<Sparkline data={tempHistory} color={tempColor} />}
-        value={<span className="text-text-strong">{temperature}°C</span>}
+        value={<span className="text-text-strong">{tempLabel}</span>}
       />
       <div className="flex justify-between text-sm">
         <span className="text-muted">GPU Power</span>

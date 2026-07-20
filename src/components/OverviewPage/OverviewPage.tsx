@@ -5,7 +5,12 @@ import { ActivityIcon } from "../ui/icons";
 interface OverviewPageProps {
   sparks: SparkSnapshot[];
   hideOffline?: boolean;
+  temperatureUnit?: "celsius" | "fahrenheit";
   onSelectSpark?: (id: string) => void;
+}
+
+function celsiusToFahrenheit(c: number): number {
+  return Math.round(c * 9 / 5 + 32);
 }
 
 function formatMb(mb: number): string {
@@ -55,13 +60,15 @@ function MiniStat({
   );
 }
 
-function SparkCard({ spark, onSelect }: { spark: SparkSnapshot; onSelect?: (id: string) => void }) {
+function SparkCard({ spark, temperatureUnit, onSelect }: { spark: SparkSnapshot; temperatureUnit: "celsius" | "fahrenheit"; onSelect?: (id: string) => void }) {
   const gpu = spark.metrics.gpu;
   const um = spark.metrics.unifiedMemory;
   const online = spark.online;
 
   const usage = gpu?.usage ?? 0;
-  const temp = gpu?.temperature ?? 0;
+  const tempRaw = gpu?.temperature ?? 0;
+  const displayTemp = temperatureUnit === "fahrenheit" ? celsiusToFahrenheit(tempRaw) : tempRaw;
+  const tempLabel = temperatureUnit === "fahrenheit" ? `${displayTemp}°F` : `${displayTemp}°C`;
   const vramPct = gpu?.vram?.percentage ?? um?.percentage ?? 0;
   const vramUsed = gpu?.vram?.used ?? um?.used ?? 0;
   const vramTotal = gpu?.vram?.total ?? um?.total ?? 0;
@@ -69,7 +76,7 @@ function SparkCard({ spark, onSelect }: { spark: SparkSnapshot; onSelect?: (id: 
 
   // Temperature bar: cool → success, warm → warning, hot → danger
   const tempBarColor =
-    temp > 85 ? "bg-danger" : temp > 65 ? "bg-warning" : temp > 40 ? "bg-accent" : "bg-success";
+    tempRaw > 85 ? "bg-danger" : tempRaw > 65 ? "bg-warning" : tempRaw > 40 ? "bg-accent" : "bg-success";
   // Usage bar: accent for moderate, warning high, danger critical
   const usageBarColor = usage > 85 ? "bg-danger" : usage > 60 ? "bg-warning" : "bg-accent";
   // VRAM allocation: accent normal → warning/danger as it fills
@@ -122,10 +129,10 @@ function SparkCard({ spark, onSelect }: { spark: SparkSnapshot; onSelect?: (id: 
             />
             <MetricBar
               label="Temperature"
-              value={temp}
-              max={100}
+              value={displayTemp}
+              max={temperatureUnit === "fahrenheit" ? 212 : 100}
               color={tempBarColor}
-              caption={`${temp}°C`}
+              caption={tempLabel}
             />
             <MetricBar
               label="Usage"
@@ -192,7 +199,7 @@ function SparkCard({ spark, onSelect }: { spark: SparkSnapshot; onSelect?: (id: 
   );
 }
 
-export function OverviewPage({ sparks, hideOffline = false, onSelectSpark }: OverviewPageProps) {
+export function OverviewPage({ sparks, hideOffline = false, temperatureUnit = "celsius", onSelectSpark }: OverviewPageProps) {
   const visibleSparks = hideOffline ? sparks.filter((s) => s.online) : sparks;
 
   if (visibleSparks.length === 0) {
@@ -229,7 +236,7 @@ export function OverviewPage({ sparks, hideOffline = false, onSelectSpark }: Ove
       </div>
       <div className="overview-page grid gap-[18px] sm:grid-cols-2 lg:grid-cols-3">
         {visibleSparks.map((spark) => (
-          <SparkCard key={spark.id} spark={spark} onSelect={onSelectSpark} />
+          <SparkCard key={spark.id} spark={spark} temperatureUnit={temperatureUnit} onSelect={onSelectSpark} />
         ))}
       </div>
     </div>

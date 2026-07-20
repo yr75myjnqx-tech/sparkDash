@@ -169,6 +169,7 @@ export interface Settings {
   pollIntervalMs: number;
   defaultLlmPort: number;
   autoHideOffline: boolean;
+  temperatureUnit: "celsius" | "fahrenheit";
 }
 
 export interface SparksListResponse {

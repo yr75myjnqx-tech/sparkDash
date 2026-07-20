@@ -14,6 +14,7 @@ const DEFAULTS = Object.freeze({
   pollIntervalMs: 2000,
   defaultLlmPort: 8888,
   autoHideOffline: false,
+  temperatureUnit: "celsius",
 });
 
 /** @type {typeof DEFAULTS} */
@@ -31,6 +32,10 @@ function _clampSettings(settings) {
   }
   // Ensure autoHideOffline is boolean
   s.autoHideOffline = Boolean(s.autoHideOffline);
+  // Ensure temperatureUnit is valid
+  if (s.temperatureUnit !== "celsius" && s.temperatureUnit !== "fahrenheit") {
+    s.temperatureUnit = DEFAULTS.temperatureUnit;
+  }
   return s;
 }
 
