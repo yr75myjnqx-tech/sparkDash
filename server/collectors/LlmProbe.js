@@ -191,14 +191,15 @@ export class LlmProbe {
       } catch {}
     }
 
+    // Single /metrics fetch: tok/s + slots/sleep (vLLM exposes max_model_len via /v1/models)
     if (!isSglang) {
-      // Try Prometheus /metrics for vLLM
       try {
         const metricsRes = await this._fetch(`${this.baseUrl}/metrics`);
         if (metricsRes.ok) {
-          const metricsText = await metricsRes.text();
-          const promptTokens = this._getVllmMetric(metricsText, "prompt_tokens_total");
-          const genTokens = this._getVllmMetric(metricsText, "generation_tokens_total");
+          const txt = await metricsRes.text();
+
+          const promptTokens = this._getVllmMetric(txt, "prompt_tokens_total");
+          const genTokens = this._getVllmMetric(txt, "generation_tokens_total");
           if (promptTokens != null && genTokens != null) {
             const deltaIn = promptTokens - this.lastTokenCounts.input;
             const deltaOut = genTokens - this.lastTokenCounts.output;
@@ -210,20 +211,7 @@ export class LlmProbe {
               this.prefillTps = Math.max(0, Math.round((deltaIn / dtSec) * 100) / 100);
             }
           }
-        }
-      } catch {}
-    }
 
-    // vLLM exposes max_model_len via /v1/models already; no internal debug endpoints
-    // exist in upstream vLLM so skip the scavenger hunt. Fall through to /metrics.
-    if (!isSglang) {
-      // Prometheus /metrics for slot/running info
-      try {
-        const mRes = await this._fetch(`${this.baseUrl}/metrics`);
-        if (mRes.ok) {
-          const txt = await mRes.text();
-
-          // Running requests as slotsActive
           const running = this._getVllmMetric(txt, "num_requests_running");
           if (running != null) this.slotsActive = Math.round(running);
 
