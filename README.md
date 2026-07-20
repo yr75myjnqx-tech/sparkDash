@@ -17,6 +17,7 @@ sparkDash is a real-time web dashboard for one or more **NVIDIA DGX Spark (GB10)
 
 ## Table of contents
 
+- [Latest version changelog](#latest-version-changelog)
 - [Features](#features)
 - [Quick start](#quick-start)
 - [Architecture](#architecture)
@@ -29,6 +30,15 @@ sparkDash is a real-time web dashboard for one or more **NVIDIA DGX Spark (GB10)
 - [How it works](#how-it-works)
 - [Contributing](#contributing)
 - [License](#license)
+
+---
+
+## Latest version changelog
+
+### Version 1.0.5
+- **Multiple LLM ports** — monitor several LLM servers on different ports simultaneously
+- **GPU processes** — see top GPU processes by VRAM usage with name and memory
+- **Spark uptime** — system uptime inline on each Spark header
 
 ---
 
