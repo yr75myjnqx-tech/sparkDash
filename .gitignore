@@ -10,9 +10,8 @@ docs/
 mockups/
 AGENTS.md
 CODEBASE.md
-PLAN.mdtetris.html
-CODEBASE.md
-.zcode/
 PLAN.md
-AGENTS.md
 tetris.html
+.zcode/
+HANDOFF.md
+handoff.md
