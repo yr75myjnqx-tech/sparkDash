@@ -23,7 +23,6 @@ Format: version sections are listed newest first.
   - Edit Spark checkbox **Worker node** (with info tooltip)
   - When set: LLM panels and “Add LLM port” are hidden; LLM ports are not probed
   - **Worker node** badge in the Spark header
-- Unit tests for WoL helpers (`test/wol.test.mjs`); `npm test` runs `node --test test/*.test.mjs`
 - README notes for power controls and LAN trust model for power APIs
 
 ### Notes

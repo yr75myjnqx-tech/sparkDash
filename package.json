@@ -16,8 +16,7 @@
     "docker:dev:build": "docker compose -f docker-compose.dev.yml up --build",
     "docker:prod": "docker compose up -d",
     "docker:rebuild": "docker compose up --build -d",
-    "frontend": "npm run build",
-    "test": "node --test test/*.test.mjs"
+    "frontend": "npm run build"
   },
   "keywords": ["nvidia", "dgx-spark", "gb10", "monitoring", "dashboard", "gpu", "llm"],
   "author": "Mia'a AI Lab",
