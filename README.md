@@ -176,6 +176,7 @@ Gear icon in the header, or `GET`/`PUT` `/api/settings`:
 | Poll interval | 2000 ms | WebSocket broadcast interval (minimum 1000 ms) |
 | Default LLM port | 8888 | Default for new Sparks |
 | Auto-hide offline | false | Hide offline Sparks on Overview |
+| Temperature unit | Celsius | Display GPU temperature in °C or °F |
 
 ### Environment variables
 
