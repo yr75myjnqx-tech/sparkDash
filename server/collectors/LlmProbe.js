@@ -167,27 +167,29 @@ export class LlmProbe {
       throw new Error("OpenAI-compatible /v1/models unreachable");
     }
 
-    // Try sglang /get_server_info
+    // Skip SGLang probe when we already know the backend is vLLM
     let isSglang = false;
-    try {
-      const sgRes = await this._fetch(`${this.baseUrl}/get_server_info`);
-      if (sgRes.ok) {
-        isSglang = true;
-        const sgData = await sgRes.json();
-        this.contextLength = sgData.max_total_tokens || sgData.context_length || this.contextLength;
-        if (sgData.total_input_tokens != null && sgData.total_output_tokens != null) {
-          const deltaIn = sgData.total_input_tokens - this.lastTokenCounts.input;
-          const deltaOut = sgData.total_output_tokens - this.lastTokenCounts.output;
-          this.lastTokenCounts.input = sgData.total_input_tokens;
-          this.lastTokenCounts.output = sgData.total_output_tokens;
-          this.totalOutputTokens = sgData.total_output_tokens;
-          if (dtSec > 0 && dtSec < 10) {
-            this.generationTps = Math.max(0, Math.round((deltaOut / dtSec) * 100) / 100);
-            this.prefillTps = Math.max(0, Math.round((deltaIn / dtSec) * 100) / 100);
+    if (this.backendType !== "vllm") {
+      try {
+        const sgRes = await this._fetch(`${this.baseUrl}/get_server_info`);
+        if (sgRes.ok) {
+          isSglang = true;
+          const sgData = await sgRes.json();
+          this.contextLength = sgData.max_total_tokens || sgData.context_length || this.contextLength;
+          if (sgData.total_input_tokens != null && sgData.total_output_tokens != null) {
+            const deltaIn = sgData.total_input_tokens - this.lastTokenCounts.input;
+            const deltaOut = sgData.total_output_tokens - this.lastTokenCounts.output;
+            this.lastTokenCounts.input = sgData.total_input_tokens;
+            this.lastTokenCounts.output = sgData.total_output_tokens;
+            this.totalOutputTokens = sgData.total_output_tokens;
+            if (dtSec > 0 && dtSec < 10) {
+              this.generationTps = Math.max(0, Math.round((deltaOut / dtSec) * 100) / 100);
+              this.prefillTps = Math.max(0, Math.round((deltaIn / dtSec) * 100) / 100);
+            }
           }
         }
-      }
-    } catch {}
+      } catch {}
+    }
 
     if (!isSglang) {
       // Try Prometheus /metrics for vLLM
@@ -212,40 +214,10 @@ export class LlmProbe {
       } catch {}
     }
 
-    // Try vLLM internal model info
+    // vLLM exposes max_model_len via /v1/models already; no internal debug endpoints
+    // exist in upstream vLLM so skip the scavenger hunt. Fall through to /metrics.
     if (!isSglang) {
-      // Try known vLLM internal endpoints (may 404 on older versions)
-      const endpoints = [
-        "/v1/internal/model_info",
-        "/v1/debug/model_info",
-        "/v1/debug/serve_config",
-        "/internal/model_info",
-        "/debug/model_info",
-        "/debug/serve_config",
-        "/v1/model_info",
-        "/v1/model-info",
-      ];
-      for (const ep of endpoints) {
-        try {
-          const infoRes = await this._fetch(`${this.baseUrl}${ep}`);
-          if (!infoRes.ok) continue;
-          const info = await infoRes.json();
-
-          if (this.contextLength == null) {
-            this.contextLength = info.max_model_len || info.max_context_length || null;
-          }
-
-          const maxSeqs = info.max_num_seqs || info.max_num_sequences || info.scheduler_max_num_seqs;
-          if (maxSeqs != null) this.slotsTotal = maxSeqs;
-
-          const gpuMem = info.gpu_memory_utilization ?? info.gpu_memory_usage ?? info.gpu_utilisation;
-          if (gpuMem != null) this.gpuMemoryUtilization = gpuMem;
-
-          break;
-        } catch {}
-      }
-
-      // Fallback: Prometheus /metrics for whatever internal endpoints didn't provide
+      // Prometheus /metrics for slot/running info
       try {
         const mRes = await this._fetch(`${this.baseUrl}/metrics`);
         if (mRes.ok) {
