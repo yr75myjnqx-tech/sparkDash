@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   cancelDecodeBench,
+  clearDecodeBenchHistory,
   getDecodeBench,
   listDecodeBench,
   startDecodeBench,
 } from "../../api/client";
 import type { DecodeBenchJob } from "../../api/types";
+import { useModalPresence } from "../../hooks/useModalPresence";
 
 const CONCURRENCY_OPTIONS = [1, 2, 3, 4, 6, 8, 16, 32] as const;
 const DEFAULT_SELECTED = [1, 2];
@@ -151,8 +153,10 @@ export function BenchmarkDialog({
 
   const isRunning = job?.status === "running";
 
+  const { mounted, visible } = useModalPresence(open);
+
   useEscape(onClose, open && !starting);
-  useBodyScrollLock(open);
+  useBodyScrollLock(mounted);
 
   const applyJobConfig = useCallback((j: DecodeBenchJob) => {
     if (Array.isArray(j.config?.concurrencies) && j.config.concurrencies.length > 0) {
@@ -277,7 +281,19 @@ export function BenchmarkDialog({
     setError(null);
   };
 
-  if (!open) return null;
+  const handleClear = async () => {
+    if (!job || job.status === "running") return;
+    setError(null);
+    try {
+      await clearDecodeBenchHistory(sparkId, llmPort);
+      stopPoll();
+      setJob(null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  if (!mounted) return null;
 
   const progressPct =
     job && job.progress.totalLevels > 0
@@ -292,7 +308,7 @@ export function BenchmarkDialog({
   const showResults = job && job.status !== "running";
 
   const dialog = (
-    <div className="bench-overlay" role="presentation">
+    <div className={`bench-overlay${visible ? " is-open" : ""}`} role="presentation">
       {/* Scrim — click to close when not running */}
       <button
         type="button"
@@ -454,6 +470,16 @@ export function BenchmarkDialog({
             </button>
           ) : job ? (
             <>
+              {job.results.length > 0 && (
+                <button
+                  type="button"
+                  className="bench-btn bench-btn--ghost"
+                  onClick={() => void handleClear()}
+                  title="Clear saved results for this port"
+                >
+                  Clear
+                </button>
+              )}
               <button type="button" className="bench-btn bench-btn--ghost" onClick={handleNewRun}>
                 New run
               </button>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchSettings, updateSettings } from "../api/client";
 import type { Settings } from "../api/types";
+import { useModalPresence } from "../hooks/useModalPresence";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -58,7 +59,7 @@ export function SettingsDialog({ open, onClose, onSaved }: SettingsDialogProps) 
     };
   }, [open]);
 
-  if (!open) return null;
+  const { mounted, visible } = useModalPresence(open);
 
   const update = (patch: Partial<Settings>) => {
     setSettings((prev) => (prev ? { ...prev, ...patch } : prev));
@@ -82,14 +83,18 @@ export function SettingsDialog({ open, onClose, onSaved }: SettingsDialogProps) 
     }
   };
 
+  if (!mounted) return null;
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      className={`settings-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4${
+        visible ? " is-open" : ""
+      }`}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="panel w-full max-w-sm p-6">
+      <div className="settings-panel w-full max-w-sm p-6">
         <h2 className="mb-4 text-sm font-semibold text-text-strong">Settings</h2>
 
         {loading && <p className="text-xs text-muted">Loading…</p>}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { addSpark, testSparkConfig } from "../api/client";
 import type { SparkConfig } from "../api/types";
+import { useModalPresence } from "../hooks/useModalPresence";
 
 interface AddSparkDialogProps {
   open: boolean;
@@ -38,14 +39,16 @@ export function AddSparkDialog({ open, onClose, onAdded, defaultLlmPort = 8888 }
 
   useEscape(onClose);
 
+  const { mounted, visible } = useModalPresence(open);
+
   useEffect(() => {
-    if (!open) return;
+    if (!mounted) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [open]);
+  }, [mounted]);
 
   // Pre-fill LLM ports from settings when dialog opens
   useEffect(() => {
@@ -54,7 +57,7 @@ export function AddSparkDialog({ open, onClose, onAdded, defaultLlmPort = 8888 }
     }
   }, [open, defaultLlmPort]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   const update = (patch: Partial<Omit<SparkConfig, "id">>) => {
     setConfig((prev) => ({ ...prev, ...patch }));
@@ -123,7 +126,7 @@ export function AddSparkDialog({ open, onClose, onAdded, defaultLlmPort = 8888 }
 
   return createPortal(
     <div
-      className="modal-overlay"
+      className={`modal-overlay${visible ? " is-open" : ""}`}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

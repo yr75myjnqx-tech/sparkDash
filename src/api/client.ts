@@ -155,6 +155,16 @@ export function cancelDecodeBench(
   });
 }
 
+/** Clear finished benchmark history for a Spark (optionally one LLM port). */
+export function clearDecodeBenchHistory(
+  id: string,
+  port?: number
+): Promise<{ success: boolean }> {
+  const q =
+    port != null && Number.isInteger(port) ? `?port=${encodeURIComponent(port)}` : "";
+  return apiFetch(`/api/sparks/${id}/llm/bench${q}`, { method: "DELETE" });
+}
+
 // ─── LLM probe ports (per Spark) ─────────────────────────
 /** Replace all LLM ports for a Spark (hot update). */
 export function updateLlmPorts(

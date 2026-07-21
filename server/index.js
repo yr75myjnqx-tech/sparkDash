@@ -582,6 +582,25 @@ app.get("/api/sparks/:id/llm/bench", (req, res) => {
   });
 });
 
+/** Clear finished bench history for a Spark (optional ?port=). Does not cancel a running job. */
+app.delete("/api/sparks/:id/llm/bench", (req, res) => {
+  const spark = registry.getSpark(req.params.id);
+  if (!spark) return res.status(404).json({ error: "Spark not found" });
+  if (decodeBenchManager.getActive(spark.id)) {
+    return res.status(409).json({ error: "Cannot clear history while a benchmark is running" });
+  }
+  const portRaw = req.query.port ?? req.body?.port;
+  const port =
+    portRaw != null && portRaw !== ""
+      ? parseInt(String(portRaw), 10)
+      : null;
+  decodeBenchManager.clearHistory(
+    spark.id,
+    Number.isInteger(port) ? port : null
+  );
+  res.json({ success: true });
+});
+
 app.get("/api/sparks/:id/llm/bench/:benchId", (req, res) => {
   const spark = registry.getSpark(req.params.id);
   if (!spark) return res.status(404).json({ error: "Spark not found" });

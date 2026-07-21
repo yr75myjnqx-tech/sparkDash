@@ -585,6 +585,42 @@ export class DecodeBenchManager {
     return hist[0] || null;
   }
 
+  /**
+   * Drop finished history (and idle job records) for a Spark.
+   * Optional port limits the wipe to that LLM port only.
+   * Does not cancel a currently running job.
+   * @param {string} sparkId
+   * @param {number | null} [port]
+   */
+  clearHistory(sparkId, port = null) {
+    const p = port != null ? Number(port) : null;
+
+    if (p != null && Number.isInteger(p)) {
+      const list = this.getHistory(sparkId).filter((j) => j.config?.port !== p);
+      if (list.length) this.historyBySpark.set(sparkId, list);
+      else this.historyBySpark.delete(sparkId);
+      for (const [benchId, job] of this.jobs.entries()) {
+        if (
+          job.sparkId === sparkId &&
+          job.config?.port === p &&
+          job.status !== "running"
+        ) {
+          this.jobs.delete(benchId);
+        }
+      }
+    } else {
+      this.historyBySpark.delete(sparkId);
+      for (const [benchId, job] of this.jobs.entries()) {
+        if (job.sparkId === sparkId && job.status !== "running") {
+          this.jobs.delete(benchId);
+        }
+      }
+    }
+
+    this._saveHistory();
+    return { ok: true };
+  }
+
   _loadHistory() {
     try {
       if (!fs.existsSync(this.historyPath)) return;

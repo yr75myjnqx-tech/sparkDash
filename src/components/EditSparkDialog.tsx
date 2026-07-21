@@ -9,6 +9,7 @@ import {
   updateSpark,
 } from "../api/client";
 import type { SparkConfig } from "../api/types";
+import { useModalPresence } from "../hooks/useModalPresence";
 import { InfoIcon } from "./ui/icons";
 
 interface EditSparkDialogProps {
@@ -52,15 +53,17 @@ export function EditSparkDialog({
 
   useEscape(onClose);
 
+  const { mounted, visible } = useModalPresence(open);
+
   // Prevent background scroll while the tall form is open (iOS)
   useEffect(() => {
-    if (!open) return;
+    if (!mounted) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [open]);
+  }, [mounted]);
 
   useEffect(() => {
     if (!open || !sparkId) {
@@ -93,7 +96,7 @@ export function EditSparkDialog({
     };
   }, [open, sparkId]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   const update = (patch: Partial<SparkConfig>) => {
     setConfig((prev) => (prev ? { ...prev, ...patch } : prev));
@@ -246,7 +249,7 @@ export function EditSparkDialog({
 
   return createPortal(
     <div
-      className="modal-overlay"
+      className={`modal-overlay${visible ? " is-open" : ""}`}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
