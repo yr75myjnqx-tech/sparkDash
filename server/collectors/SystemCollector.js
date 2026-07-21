@@ -971,7 +971,11 @@ export class SystemCollector {
     // Total used = GPU + CPU (but GPU is the main component)
     const usedMB = gpuUsedMB + cpuUsedMB;
     const percentage = totalMB > 0 ? Math.round((usedMB / totalMB) * 100) : 0;
-    const oomRisk = percentage > 85 ? "high" : percentage > 60 ? "medium" : "low";
+    const availableGB = Math.round(availKB / 1024) / 1024;
+    const oomRisk =
+      availableGB < 1 || percentage > 95 ? "high" :
+      availableGB < 4 || percentage > 80 ? "medium" :
+      "low";
 
     // Memory bandwidth (nvidia-smi dmon) — host namespaces when in Docker
     let bandwidth = { current: 0, peak: 400 };
@@ -1336,7 +1340,11 @@ export class SystemCollector {
 
       const usedMB = gpuUsedMB + cpuUsedMB;
       const percentage = totalMB > 0 ? Math.round((usedMB / totalMB) * 100) : 0;
-      const oomRisk = percentage > 85 ? "high" : percentage > 60 ? "medium" : "low";
+      const availableGB = Math.round(availKB / 1024) / 1024;
+      const oomRisk =
+        availableGB < 1 || percentage > 95 ? "high" :
+        availableGB < 4 || percentage > 80 ? "medium" :
+        "low";
 
       return {
         total: totalMB,
