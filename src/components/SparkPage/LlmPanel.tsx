@@ -50,12 +50,15 @@ function MetricInfoTip({
   text,
   openId,
   setOpenId,
+  /** Anchor tooltip to the right so edge columns don’t clip off-screen */
+  align = "left",
 }: {
   id: string;
   label: string;
   text: string;
   openId: string | null;
   setOpenId: (id: string | null) => void;
+  align?: "left" | "right";
 }) {
   const open = openId === id;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -101,7 +104,9 @@ function MetricInfoTip({
           <div
             onMouseEnter={clearTimer}
             onMouseLeave={scheduleClose}
-            className="absolute left-0 top-full z-20 mt-1 w-52 rounded-md border border-border bg-surface-elevated px-3 py-2 text-left text-[11px] font-normal normal-case leading-snug text-text shadow-lg"
+            className={`absolute top-full z-20 mt-1 w-52 max-w-[min(13rem,calc(100vw-1.5rem))] rounded-md border border-border bg-surface-elevated px-3 py-2 text-left text-[11px] font-normal normal-case leading-snug text-text shadow-lg ${
+              align === "right" ? "right-0 left-auto" : "left-0 right-auto"
+            }`}
           >
             {text}
           </div>
@@ -416,6 +421,7 @@ export function LlmPanel({ llm, sparkId, llmPort, onRemovePort, className }: Llm
                   text={VLLM_METRIC_INFO.requests}
                   openId={metricInfoId}
                   setOpenId={setMetricInfoId}
+                  align="right"
                 />
                 <div className="font-tabular text-sm text-text">
                   {llm.requestsRunning != null && llm.requestsWaiting != null
@@ -442,6 +448,7 @@ export function LlmPanel({ llm, sparkId, llmPort, onRemovePort, className }: Llm
                   text={VLLM_METRIC_INFO.preempts}
                   openId={metricInfoId}
                   setOpenId={setMetricInfoId}
+                  align="right"
                 />
                 <div className="font-tabular text-sm text-text">
                   {llm.preemptionsTotal != null
