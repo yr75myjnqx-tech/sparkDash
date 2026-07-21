@@ -7,18 +7,15 @@
   <img src="https://img.shields.io/badge/license-MIT-2d9d78?style=flat-square" alt="MIT License">
   <br>
   <sub>by <a href="https://x.com/MiaAI_lab">Mia'a AI Lab</a></sub>
+  <br><br>
+  <!-- Avoid <table>: GitHub markdown always paints cell borders. Same line + vertical-align. -->
+  <a href="https://ko-fi.com/Z8Z3SPLOD" target="_blank" style="display:inline-block;margin:0 8px;vertical-align:middle;"><img src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" alt="Buy Me a Coffee at ko-fi.com" height="36" border="0" style="vertical-align:middle;border:0;" /></a>
+  <a href="https://x.com/MiaAI_lab" target="_blank" style="display:inline-block;margin:0 8px;vertical-align:middle;"><img src="https://img.shields.io/badge/Follow%20me%20on%20X-000000?style=for-the-badge&logo=x&logoColor=white" alt="Follow Mia on X" height="36" style="vertical-align:middle;border:0;" /></a>
 </p>
 
 sparkDash is a real-time web dashboard for one or more **NVIDIA DGX Spark (GB10)** machines in a single browser window. It streams GPU, CPU, unified memory, storage, network, and local LLM metrics — and lets you add, edit, reorder, or remove Sparks from the UI without restarts or code changes.
 
 <img src="./assets/screenshot.png" alt="sparkDash Overview page with multiple DGX Spark units, GPU metrics, and LLM status" width="800">
-
-<!-- Avoid <table>: GitHub markdown always paints cell borders. Same line + vertical-align. -->
-<p style="margin:6px 0;">
-  <a href="https://ko-fi.com/Z8Z3SPLOD" target="_blank" style="display:inline-block;margin:0 13px 0 0;vertical-align:middle;"><img src="https://storage.ko-fi.com/cdn/kofi6.png?v=6" alt="Buy Me a Coffee at ko-fi.com" height="36" border="0" style="vertical-align:middle;border:0;" /></a>
-  &nbsp;&nbsp;
-  <a href="https://x.com/MiaAI_lab" target="_blank" style="display:inline-block;vertical-align:middle;"><img src="https://img.shields.io/badge/Follow%20me%20on%20X-000000?style=for-the-badge&logo=x&logoColor=white" alt="Follow Mia on X" height="36" style="vertical-align:middle;border:0;" /></a>
-</p>
 
 ---
 
