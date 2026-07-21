@@ -162,6 +162,8 @@ export interface UnifiedMemoryMetrics {
     current: number;
     peak: number;
   };
+  /** Cumulative count of NV_ERR_NO_MEMORY kernel driver errors */
+  nvErrNoMemory: number;
 }
 
 // ─── LLM metrics ─────────────────────────────────────────

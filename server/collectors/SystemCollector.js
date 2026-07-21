@@ -977,6 +977,22 @@ export class SystemCollector {
       availableGB < 4 || percentage > 80 ? "medium" :
       "low";
 
+    // NV_ERR_NO_MEMORY kernel error count from the NVRM driver (local)
+    let nvErrNoMemory = 0;
+    try {
+      const out = await this._exec(
+        'journalctl -k --no-pager 2>/dev/null | grep -c "NV_ERR_NO_MEMORY" || true'
+      );
+      if (out && !Number.isNaN(Number(out))) nvErrNoMemory = parseInt(out, 10);
+    } catch {
+      try {
+        const out = await this._exec(
+          'dmesg 2>/dev/null | grep -c "NV_ERR_NO_MEMORY" || true'
+        );
+        if (out && !Number.isNaN(Number(out))) nvErrNoMemory = parseInt(out, 10);
+      } catch {}
+    }
+
     // Memory bandwidth (nvidia-smi dmon) — host namespaces when in Docker
     let bandwidth = { current: 0, peak: 400 };
     try {
@@ -1000,6 +1016,7 @@ export class SystemCollector {
       percentage,
       oomRisk,
       bandwidth,
+      nvErrNoMemory,
     };
   }
 
@@ -1310,12 +1327,15 @@ export class SystemCollector {
         "grep -E 'MemTotal|MemAvailable' /proc/meminfo 2>/dev/null",
         "echo '---'",
         "nvidia-smi --query-compute-apps=pid,process_name,used_gpu_memory --format=csv,noheader,nounits 2>/dev/null",
+        "echo '---'",
+        "dmesg 2>/dev/null | grep -c 'NV_ERR_NO_MEMORY' || echo 0",
       ].join("; ");
 
       const output = await sshExec(this.spark, cmd);
       const sections = output.split("---");
       const memOut = sections[0]?.trim() || "";
       const computeOut = sections[1]?.trim() || "";
+      const nvErrOut = sections[2]?.trim() || "0";
 
       const totalMatch = memOut.match(/MemTotal:\s+(\d+)\s+kB/);
       const availMatch = memOut.match(/MemAvailable:\s+(\d+)\s+kB/);
@@ -1346,6 +1366,8 @@ export class SystemCollector {
         availableGB < 4 || percentage > 80 ? "medium" :
         "low";
 
+      const nvErrNoMemory = parseInt(nvErrOut, 10) || 0;
+
       return {
         total: totalMB,
         gpuUsed: gpuUsedMB,
@@ -1355,6 +1377,7 @@ export class SystemCollector {
         percentage,
         oomRisk,
         bandwidth: { current: 0, peak: 400 },
+        nvErrNoMemory,
       };
     } catch (err) {
       console.error(`[SystemCollector] Remote Unified Memory error for ${this.spark.id}:`, err.message);
@@ -1508,6 +1531,7 @@ export class SystemCollector {
       percentage: 0,
       oomRisk: "low",
       bandwidth: { current: 0, peak: 0 },
+      nvErrNoMemory: 0,
     };
   }
 
