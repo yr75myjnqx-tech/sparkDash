@@ -26,6 +26,18 @@ const VLLM_METRIC_INFO = {
 } as const;
 
 /** Backend badge — neutral surfaces with a single accent dot. No blue/purple. */
+function formatUptime(seconds: number): string {
+  if (seconds < 60) return "<1m";
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const remainMins = mins % 60;
+  if (hours < 24) return `${hours}h ${remainMins}m`;
+  const days = Math.floor(hours / 24);
+  const remainHours = hours % 24;
+  return `${days}d ${remainHours}h`;
+}
+
 function BackendBadge({ backend }: { backend: string | null }) {
   if (!backend) return <span className="text-xs text-muted">No backend</span>;
 
@@ -388,7 +400,14 @@ export function LlmPanel({ llm, sparkId, llmPort, onRemovePort, className }: Llm
             </div>
           </div>
 
-          {llm?.backend === "vllm" && (
+          <div className="flex items-center justify-between border-t border-border pt-2">
+            <span className="text-[10px] uppercase tracking-wide text-muted">Uptime</span>
+            <span className="font-tabular text-sm text-text">
+              {llm?.uptimeSec != null ? formatUptime(llm.uptimeSec) : "—"}
+            </span>
+          </div>
+
+          {llm?.backend === "vllm" && (<>
             <div className="grid grid-cols-2 gap-2 border-t border-border pt-3 sm:grid-cols-4">
               <div className="space-y-0.5">
                 <MetricInfoTip
@@ -457,8 +476,26 @@ export function LlmPanel({ llm, sparkId, llmPort, onRemovePort, className }: Llm
                 </div>
               </div>
             </div>
-          )}
 
+            <div className="grid grid-cols-2 gap-2 border-t border-border pt-2">
+              <div className="space-y-0.5">
+                <div className="text-[10px] uppercase tracking-wide text-muted">Queue</div>
+                <div className="font-tabular text-sm text-text">
+                  {llm?.queueTimeSec != null
+                    ? `${(llm.queueTimeSec * 1000).toFixed(0)}ms`
+                    : "—"}
+                </div>
+              </div>
+              <div className="space-y-0.5">
+                <div className="text-[10px] uppercase tracking-wide text-muted">ITL</div>
+                <div className="font-tabular text-sm text-text">
+                  {llm?.itlSec != null
+                    ? `${(llm.itlSec * 1000).toFixed(0)}ms`
+                    : "—"}
+                </div>
+              </div>
+            </div>
+            </>)}
           <div className="border-t border-border pt-3">
             <button
               type="button"

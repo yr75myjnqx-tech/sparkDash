@@ -179,6 +179,12 @@ export interface LlmMetrics {
   prefillTps: number;
   /** Cumulative total output (generation) tokens as reported by the LLM server */
   totalOutputTokens: number;
+  /** LLM process uptime in seconds, or null if unavailable */
+  uptimeSec: number | null;
+  /** Average inter-token latency in seconds. null when unavailable. */
+  itlSec: number | null;
+  /** Average queue time in seconds (from histogram sum/count). null when unavailable. */
+  queueTimeSec: number | null;
   /** vLLM KV cache usage fraction (0–1). null when backend !== vllm or unreachable. */
   kvCacheUsage?: number | null;
   /** vLLM running request count. null when unavailable. */

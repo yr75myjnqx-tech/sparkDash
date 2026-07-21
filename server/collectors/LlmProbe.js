@@ -4,7 +4,9 @@
  *
  * Ported from legacy `probeLlamaServerType` and `_getLlamaMetricsFor`.
  */
-import { LLM_PROBE_TIMEOUT_MS } from "../config.js";
+import fs from "fs";
+import path from "path";
+import { LLM_PROBE_TIMEOUT_MS, HOST_PATHS } from "../config.js";
 
 const FAIL_RESET_THRESHOLD = 3;
 const REDETECT_INTERVAL_MS = 60_000;
@@ -44,6 +46,14 @@ export class LlmProbe {
     this.requestsWaiting = null;
     this.ttftP95Seconds = null;
     this.preemptionsTotal = null; // cumulative counter
+
+    this.uptimeSec = null;
+    this.queueTimeSec = null;
+    this.itlSec = null;
+    this._lastItlCount = 0;
+    this._lastItlSum = 0;
+    this._lastQueueCount = 0;
+    this._lastQueueSum = 0;
 
     this._consecutiveFailures = 0;
     this._lastDetectAt = 0;
@@ -124,6 +134,13 @@ export class LlmProbe {
     this.requestsWaiting = null;
     this.ttftP95Seconds = null;
     this.preemptionsTotal = null;
+    this.uptimeSec = null;
+    this.queueTimeSec = null;
+    this.itlSec = null;
+    this._lastItlCount = 0;
+    this._lastItlSum = 0;
+    this._lastQueueCount = 0;
+    this._lastQueueSum = 0;
     this.slotState.clear();
     this.lastTokenCounts = { input: 0, output: 0 };
   }
@@ -245,6 +262,59 @@ export class LlmProbe {
           const ttftP95 = this._histogramQuantile(ttftHist.buckets, ttftHist.total, 0.95);
           // Round to 3 decimals so WS snapshots stay stable (avoids float jitter)
           this.ttftP95Seconds = ttftP95 == null ? null : Math.round(ttftP95 * 1000) / 1000;
+
+          // LLM process uptime from Prometheus client start time (no vllm: prefix)
+          const startTimeMatch = /^process_start_time_seconds\s+([\d.eE+-]+)\s*$/m.exec(txt);
+          if (startTimeMatch) {
+            const startTime = parseFloat(startTimeMatch[1]);
+            if (Number.isFinite(startTime) && startTime > 0) {
+              this.uptimeSec = Math.max(0, Math.floor(Date.now() / 1000 - startTime));
+            }
+          }
+
+          // Inter-token latency histogram: compute average from sum/count delta
+          const itlCnt = this._getVllmMetric(txt, "inter_token_latency_seconds_count");
+          const itlSum = this._getVllmMetric(txt, "inter_token_latency_seconds_sum");
+          if (itlCnt != null && itlSum != null && itlCnt > this._lastItlCount) {
+            const dCnt = itlCnt - this._lastItlCount;
+            const dSum = itlSum - this._lastItlSum;
+            if (dCnt > 0) this.itlSec = Math.round((dSum / dCnt) * 1000) / 1000;
+            this._lastItlCount = itlCnt;
+            this._lastItlSum = itlSum;
+          }
+
+          // Queue time histogram
+          const qCnt = this._getVllmMetric(txt, "request_queue_time_seconds_count");
+          const qSum = this._getVllmMetric(txt, "request_queue_time_seconds_sum");
+          if (qCnt != null && qSum != null && qCnt > this._lastQueueCount) {
+            const dCnt = qCnt - this._lastQueueCount;
+            const dSum = qSum - this._lastQueueSum;
+            if (dCnt > 0) this.queueTimeSec = Math.round((dSum / dCnt) * 1000) / 1000;
+            this._lastQueueCount = qCnt;
+            this._lastQueueSum = qSum;
+          }
+
+          // vLLM exposes gpu_memory_utilization in cache_config_info labels
+          if (this.gpuMemoryUtilization == null) {
+            const cacheInfo = this._getVllmCacheConfigInfo(txt);
+            if (cacheInfo?.gpuMemoryUtilization != null) {
+              this.gpuMemoryUtilization = cacheInfo.gpuMemoryUtilization;
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // Fallback: parse the host vLLM process command line for config values
+    // that internal endpoints don't expose on this build.
+    if (this.slotsTotal === 0 || this.gpuMemoryUtilization == null) {
+      try {
+        const hostArgs = this._getVllmHostArgs();
+        if (hostArgs?.maxNumSeqs != null && this.slotsTotal === 0) {
+          this.slotsTotal = hostArgs.maxNumSeqs;
+        }
+        if (hostArgs?.gpuMemoryUtilization != null && this.gpuMemoryUtilization == null) {
+          this.gpuMemoryUtilization = hostArgs.gpuMemoryUtilization;
         }
       } catch {}
     }
@@ -425,6 +495,9 @@ export class LlmProbe {
       requestsWaiting: this.requestsWaiting,
       ttftP95Seconds: this.ttftP95Seconds,
       preemptionsTotal: this.preemptionsTotal,
+      uptimeSec: this.uptimeSec,
+      queueTimeSec: this.queueTimeSec,
+      itlSec: this.itlSec,
       error: this.error,
     };
   }
@@ -447,8 +520,59 @@ export class LlmProbe {
       requestsWaiting: null,
       ttftP95Seconds: null,
       preemptionsTotal: null,
+      uptimeSec: null,
+      queueTimeSec: null,
+      itlSec: null,
       error: this.error,
     };
+  }
+
+  // ─── vLLM cache_config_info parser ───────────────────────
+  _getVllmCacheConfigInfo(body) {
+    const re = /^vllm:cache_config_info\{([^}]+)\}\s+[\d.]+\s*$/gm;
+    const out = {};
+    let m;
+    while ((m = re.exec(body)) !== null) {
+      const labels = m[1];
+      const gpuMatch = /gpu_memory_utilization="([^"]+)"/.exec(labels);
+      if (gpuMatch) {
+        const v = parseFloat(gpuMatch[1]);
+        if (Number.isFinite(v)) out.gpuMemoryUtilization = v;
+      }
+    }
+    return out;
+  }
+
+  // ─── Host process cmdline parser ─────────────────────────
+  _getVllmHostArgs() {
+    const procRoot = HOST_PATHS?.PROC || "/host/proc";
+    if (!fs.existsSync(procRoot)) return null;
+    const entries = fs.readdirSync(procRoot);
+    for (const entry of entries) {
+      if (!/^\d+$/.test(entry)) continue;
+      const cmdlinePath = path.join(procRoot, entry, "cmdline");
+      let cmdline;
+      try { cmdline = fs.readFileSync(cmdlinePath, "utf8"); } catch { continue; }
+      if (!cmdline.includes("vllm") || !cmdline.includes("--max-num-seqs")) continue;
+      const readable = cmdline.replace(/\0/g, " ");
+      const portFlag = `--port ${this.port}`;
+      if (!readable.includes(portFlag)) continue;
+      const args = cmdline.split("\0").filter(Boolean);
+      const out = {};
+      for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === "--max-num-seqs" && i + 1 < args.length) {
+          const v = parseInt(args[i + 1], 10);
+          if (Number.isInteger(v)) out.maxNumSeqs = v;
+        }
+        if (arg === "--gpu-memory-utilization" && i + 1 < args.length) {
+          const v = parseFloat(args[i + 1]);
+          if (Number.isFinite(v)) out.gpuMemoryUtilization = v;
+        }
+      }
+      return out;
+    }
+    return null;
   }
 
   // ─── HTTP helpers ────────────────────────────────────────
