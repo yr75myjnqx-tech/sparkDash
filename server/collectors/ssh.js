@@ -58,9 +58,12 @@ function sshpassAvailable() {
  *
  * @param {Object} spark - Spark config object
  * @param {string} cmd - Command to execute (passed as a single remote argv via bash -c)
+ * @param {{ timeoutMs?: number }} [options]
  * @returns {Promise<string>} - Trimmed stdout
  */
-export async function sshExec(spark, cmd) {
+export async function sshExec(spark, cmd, options = {}) {
+  const timeoutMs =
+    Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : 10000;
   const { host, user, auth, password } = spark.ssh || {};
   const targetHost = host || spark.lanIp;
 
@@ -127,7 +130,7 @@ export async function sshExec(spark, cmd) {
   }
 
   return new Promise((resolve, reject) => {
-    execFile(file, args, { timeout: 10000, env, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(file, args, { timeout: timeoutMs, env, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) {
         const msg = stderr?.trim() || err.message;
         reject(new Error(`SSH to ${targetHost} failed: ${msg}`));

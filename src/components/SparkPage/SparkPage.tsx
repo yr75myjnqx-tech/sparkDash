@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import type { SparkSnapshot } from "../../api/types";
+import { isLlmMonitoringEnabled } from "../../api/sparkRole";
 import { updateSpark, refreshSparkMetric, addLlmPort, removeLlmPort } from "../../api/client";
 import { SparkHeader } from "./SparkHeader";
 import { GpuPanel } from "./GpuPanel";
@@ -110,7 +111,7 @@ export function SparkPage({ spark, temperatureUnit, onEdit }: SparkPageProps) {
           disabledInterfaces={disabledInterfaces}
           onDisabledChange={setDisabledInterfaces}
         />
-        {!spark.workerNode && (
+        {isLlmMonitoringEnabled(spark) && (
           <>
             {llmPorts.map((port, i) => {
               const llmMetrics = metrics.llm?.[i] ?? null;

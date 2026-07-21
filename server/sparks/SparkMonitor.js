@@ -31,9 +31,9 @@ export class SparkMonitor {
     this._onWolMac = typeof options.onWolMac === "function" ? options.onWolMac : null;
     this.collector = new SystemCollector(spark);
 
-    // One LlmProbe per port — Map<port, LlmProbe> (none on worker nodes)
+    // One LlmProbe per port — none when LLM monitoring is off
     this.llmProbes = new Map();
-    if (!spark.workerNode) {
+    if (this._llmMonitoringEnabled(spark)) {
       for (const port of this._llmPorts()) {
         this.llmProbes.set(port, new LlmProbe(spark, port));
       }
@@ -69,12 +69,12 @@ export class SparkMonitor {
 
   /** Hot-update config without tearing down poll loops / rate baselines. */
   updateConfig(spark) {
-    const wasWorker = Boolean(this.spark?.workerNode);
+    const wasLlm = this._llmMonitoringEnabled(this.spark);
     this.spark = spark;
     this.collector.spark = spark;
 
     // Rebuild LLM probe map — add new ports, remove stale ones, update existing
-    const ports = this.spark.workerNode ? [] : this._llmPorts();
+    const ports = this._llmMonitoringEnabled() ? this._llmPorts() : [];
     const prevProbes = this.llmProbes;
     this.llmProbes = new Map();
     for (const port of ports) {
@@ -86,24 +86,35 @@ export class SparkMonitor {
         this.llmProbes.set(port, new LlmProbe(spark, port));
       }
     }
-    if (this.spark.workerNode) {
+    if (!this._llmMonitoringEnabled()) {
       this._metrics.llm = [];
     }
 
-    // Toggle LLM poll interval when workerNode flips without full restart
-    if (this._running && wasWorker !== Boolean(this.spark.workerNode)) {
+    // Toggle LLM poll interval when monitoring enablement flips
+    if (this._running && wasLlm !== this._llmMonitoringEnabled()) {
       this._restartLlmPollInterval();
     }
   }
 
-  /** Start or clear the LLM poll timer based on workerNode. */
+  /**
+   * Workers: never. Head: always. Standalone: llmMonitoring (default true).
+   * @param {object} [spark]
+   */
+  _llmMonitoringEnabled(spark = this.spark) {
+    const role = spark?.role || (spark?.workerNode ? "worker" : "standalone");
+    if (role === "worker") return false;
+    if (role === "head") return true;
+    return spark?.llmMonitoring !== false;
+  }
+
+  /** Start or clear the LLM poll timer based on monitoring flag. */
   _restartLlmPollInterval() {
     if (this._llmIntervalId != null) {
       clearInterval(this._llmIntervalId);
       this._intervals = this._intervals.filter((id) => id !== this._llmIntervalId);
       this._llmIntervalId = null;
     }
-    if (!this.spark.workerNode && this._running) {
+    if (this._llmMonitoringEnabled() && this._running) {
       this._llmIntervalId = setInterval(() => this._pollDomain("llm"), POLL_INTERVAL_LLM);
       this._intervals.push(this._llmIntervalId);
       void this._pollDomain("llm");
@@ -154,7 +165,7 @@ export class SparkMonitor {
 
   /** Return a full snapshot of this Spark's metrics. */
   snapshot() {
-    const ports = this.spark.workerNode ? [] : this._llmPorts();
+    const ports = this._llmMonitoringEnabled() ? this._llmPorts() : [];
     return {
       id: this.spark.id,
       name: this.spark.name,
@@ -164,6 +175,10 @@ export class SparkMonitor {
       disabledInterfaces: this.spark.disabledInterfaces || [],
       storagePollDisabled: Boolean(this.spark.storagePollDisabled),
       workerNode: Boolean(this.spark.workerNode),
+      role: this.spark.role || (this.spark.workerNode ? "worker" : "standalone"),
+      workerLabel: this.spark.workerLabel || null,
+      workerHeadId: this.spark.workerHeadId || null,
+      llmMonitoring: this._llmMonitoringEnabled(),
       llmPort: ports[0] ?? LLM_PORT,
       llmPorts: ports,
       hardware: this._getHardwareSummary(),
@@ -257,7 +272,7 @@ export class SparkMonitor {
     // Skip storage auto-poll when disabled for this spark
     if (domain === "storage" && this.spark.storagePollDisabled) return;
     // Worker nodes: no local LLM API
-    if (domain === "llm" && this.spark.workerNode) return;
+    if (domain === "llm" && !this._llmMonitoringEnabled()) return;
     this._inflight[domain] = true;
     try {
       let result;

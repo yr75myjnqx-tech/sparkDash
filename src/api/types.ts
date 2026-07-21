@@ -29,13 +29,36 @@ export interface SparkConfig {
   /** HTTP ports for LLM servers on this Spark (default [8888]) */
   llmPorts?: number[];
   /**
-   * When true, this Spark is a distributed-LLM worker: no local OpenAI API.
-   * The LLM card is hidden and LLM ports are not probed.
+   * Cluster role for overview + worker behavior.
+   * - head / standalone: local LLM API probed
+   * - worker: no local API (LLM card hidden, ports not probed)
+   */
+  role?: SparkRole;
+  /**
+   * Legacy/derived: true when role is worker. Prefer `role`.
+   * Kept so existing probe/card checks keep working.
    */
   workerNode?: boolean;
+  /**
+   * Optional label for a worker node (cluster / model name), shown on the overview card.
+   * Only meaningful when role is worker.
+   */
+  workerLabel?: string | null;
+  /**
+   * Optional id of the head Spark this worker belongs to.
+   * Only meaningful when role is worker.
+   */
+  workerHeadId?: string | null;
+  /**
+   * Standalone only: probe local LLM and show the LLM card (default true).
+   * Forced true for head, forced false for worker.
+   */
+  llmMonitoring?: boolean;
   /** When true, storage is only updated on manual refresh, not auto-polled. */
   storagePollDisabled?: boolean;
 }
+
+export type SparkRole = "head" | "worker" | "standalone";
 
 // ─── Hardware info ───────────────────────────────────────
 export interface HardwareInfo {
@@ -184,8 +207,16 @@ export interface SparkSnapshot {
   disabledDevices: string[];
   disabledInterfaces: string[];
   storagePollDisabled?: boolean;
-  /** Distributed LLM worker — LLM card inactive / not shown */
+  /** Cluster role (head / worker / standalone) */
+  role?: SparkRole;
+  /** Distributed LLM worker — LLM card inactive / not shown (role === worker) */
   workerNode?: boolean;
+  /** Optional cluster/model label when role is worker */
+  workerLabel?: string | null;
+  /** Optional head Spark id when role is worker */
+  workerHeadId?: string | null;
+  /** Standalone: whether LLM is probed (head always true, worker always false) */
+  llmMonitoring?: boolean;
   /** LLM server port (first port, for backward compat) */
   llmPort: number;
   /** All LLM server ports configured for this Spark */

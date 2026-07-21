@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { SparkSnapshot } from "../../api/types";
+import { resolveSparkRole } from "../../api/sparkRole";
 import { shutdownSpark, wakeSpark } from "../../api/client";
 import { EditIcon, PowerOffIcon, PowerOnIcon } from "../ui/icons";
 
@@ -80,14 +81,39 @@ export function SparkHeader({ spark, onEdit }: SparkHeaderProps) {
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h2 className="truncate text-base font-semibold text-text-strong">{spark.name}</h2>
-            {spark.workerNode && (
-              <span
-                className="shrink-0 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent"
-                title="Distributed LLM worker — no local model API; LLM card is hidden"
-              >
-                Worker node
-              </span>
-            )}
+            {(() => {
+              const role = resolveSparkRole(spark);
+              const text =
+                role === "head" ? "Head" : role === "worker" ? "Worker" : "Standalone";
+              const title =
+                role === "head"
+                  ? "Cluster head — local LLM API"
+                  : role === "worker"
+                    ? "Distributed LLM worker — no local model API; LLM card is hidden"
+                    : spark.llmMonitoring === false
+                      ? "Standalone — LLM monitoring off"
+                      : "Standalone — local LLM API";
+              const workerLabel =
+                role === "worker" ? spark.workerLabel?.trim() || null : null;
+              return (
+                <>
+                  <span
+                    className="shrink-0 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent"
+                    title={title}
+                  >
+                    {text}
+                  </span>
+                  {workerLabel && (
+                    <span
+                      className="max-w-[14rem] truncate rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent"
+                      title={workerLabel}
+                    >
+                      {workerLabel}
+                    </span>
+                  )}
+                </>
+              );
+            })()}
             {online && spark.uptime != null && (
               <span
                 className="shrink-0 rounded bg-accent/15 px-1.5 py-0.5 font-tabular text-[10px] font-medium text-accent"

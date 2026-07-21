@@ -8,7 +8,8 @@ import {
   testSparkConfig,
   updateSpark,
 } from "../api/client";
-import type { SparkConfig } from "../api/types";
+import type { SparkConfig, SparkRole } from "../api/types";
+import { resolveSparkRole } from "../api/sparkRole";
 import { useModalPresence } from "../hooks/useModalPresence";
 import { InfoIcon } from "./ui/icons";
 
@@ -43,6 +44,8 @@ export function EditSparkDialog({
    *  actually looking at (vs. the stored config the registered test route
    *  would read). */
   const [savedConfig, setSavedConfig] = useState<SparkConfig | null>(null);
+  /** All Sparks — used for the worker head picker. */
+  const [allSparks, setAllSparks] = useState<SparkConfig[]>([]);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -69,6 +72,7 @@ export function EditSparkDialog({
     if (!open || !sparkId) {
       setConfig(null);
       setSavedConfig(null);
+      setAllSparks([]);
       setPassword("");
       setTestResult(null);
       setError(null);
@@ -80,6 +84,7 @@ export function EditSparkDialog({
     fetchSparks()
       .then((res) => {
         if (cancelled) return;
+        setAllSparks(res.sparks);
         const found = res.sparks.find((s) => s.id === sparkId) || null;
         setConfig(found);
         setSavedConfig(found);
@@ -98,8 +103,19 @@ export function EditSparkDialog({
 
   if (!mounted) return null;
 
+  const role: SparkRole = resolveSparkRole(config ?? {});
+
   const update = (patch: Partial<SparkConfig>) => {
     setConfig((prev) => (prev ? { ...prev, ...patch } : prev));
+  };
+
+  const setRole = (next: SparkRole) => {
+    update({
+      role: next,
+      workerNode: next === "worker",
+      // Leaving Worker: turn monitoring back on (worker forces it false in state).
+      llmMonitoring: next === "worker" ? false : next === "head" ? true : true,
+    });
   };
 
   const updateSsh = (patch: Partial<SparkConfig["ssh"]>) => {
@@ -214,7 +230,12 @@ export function EditSparkDialog({
         cx7Ip: config.cx7Ip,
         macAddress: config.macAddress || null,
         isLocal: config.isLocal,
-        workerNode: Boolean(config.workerNode),
+        role,
+        workerNode: role === "worker",
+        workerLabel: role === "worker" ? (config.workerLabel?.trim() || null) : null,
+        workerHeadId: role === "worker" ? (config.workerHeadId?.trim() || null) : null,
+        llmMonitoring:
+          role === "worker" ? false : role === "head" ? true : config.llmMonitoring !== false,
         ssh: {
           host: config.ssh.host || config.lanIp,
           user: config.ssh.user,
@@ -331,22 +352,98 @@ export function EditSparkDialog({
                 This host (local collectors — no SSH for metrics)
               </label>
 
-              <label className="flex items-center gap-2 text-xs text-muted">
-                <input
-                  type="checkbox"
-                  checked={Boolean(config.workerNode)}
-                  onChange={(e) => update({ workerNode: e.target.checked })}
-                  className="rounded border-border"
-                />
-                <span>Worker node</span>
-                <span
-                  className="inline-flex shrink-0 cursor-help text-muted hover:text-text"
-                  title="Check this when this Spark is a distributed-LLM worker (no local OpenAI-style API). The LLM card on this Spark will be inactive / hidden, and LLM ports will not be probed."
-                  aria-label="When checked, the LLM card is not shown on this Spark because workers do not expose a local model API."
+              <div>
+                <label className="mb-1 flex items-center gap-1.5 text-xs text-muted">
+                  <span>Role</span>
+                  <span
+                    className="inline-flex shrink-0 cursor-help text-muted hover:text-text"
+                    title="Head always monitors the local LLM. Standalone can opt in/out. Workers have no local API — the LLM card is hidden and ports are not probed."
+                    aria-label="Head always monitors the local LLM. Standalone can opt in or out. Workers hide the LLM card and do not probe ports."
+                  >
+                    <InfoIcon className="h-3.5 w-3.5" />
+                  </span>
+                </label>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as SparkRole)}
+                  className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
                 >
-                  <InfoIcon className="h-3.5 w-3.5" />
-                </span>
-              </label>
+                  <option value="head">Head</option>
+                  <option value="worker">Worker</option>
+                  <option value="standalone">Standalone</option>
+                </select>
+              </div>
+
+              {role === "standalone" && (
+                <label className="flex items-center gap-2 text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    checked={config.llmMonitoring !== false}
+                    onChange={(e) => update({ llmMonitoring: e.target.checked })}
+                    className="rounded border-border"
+                  />
+                  <span>LLM monitoring</span>
+                  <span
+                    className="inline-flex shrink-0 cursor-help text-muted hover:text-text"
+                    title="When enabled, probe the local LLM API and show the LLM card on this Spark."
+                    aria-label="Enable probing the local LLM API and showing the LLM card."
+                  >
+                    <InfoIcon className="h-3.5 w-3.5" />
+                  </span>
+                </label>
+              )}
+
+              {role === "worker" && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1 block text-xs text-muted">
+                      Worker label (cluster / model)
+                    </label>
+                    <input
+                      type="text"
+                      value={config.workerLabel || ""}
+                      onChange={(e) => update({ workerLabel: e.target.value || null })}
+                      placeholder="e.g. DeepSeek V4 Flash"
+                      className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
+                    />
+                    <p className="mt-1 text-[10px] text-muted">
+                      Shown on the overview card. Leave blank to show “distributed”.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs text-muted">Head Spark</label>
+                    <select
+                      value={config.workerHeadId || ""}
+                      onChange={(e) => update({ workerHeadId: e.target.value || null })}
+                      className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
+                    >
+                      <option value="">None</option>
+                      {config.workerHeadId &&
+                        !allSparks.some((s) => s.id === config.workerHeadId) && (
+                          <option value={config.workerHeadId}>
+                            Missing spark ({config.workerHeadId})
+                          </option>
+                        )}
+                      {allSparks
+                        .filter((s) => s.id !== config.id)
+                        .map((s) => {
+                          const sRole = resolveSparkRole(s);
+                          const suffix =
+                            sRole === "head" ? " (Head)" : sRole === "worker" ? " (Worker)" : "";
+                          return (
+                            <option key={s.id} value={s.id}>
+                              {s.name}{suffix}
+                            </option>
+                          );
+                        })}
+                    </select>
+                    <p className="mt-1 text-[10px] text-muted">
+                      Optional. Which Spark serves as the cluster head for this worker.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {!config.isLocal && (
                 <>

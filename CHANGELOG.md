@@ -7,6 +7,29 @@ Format: version sections are listed newest first.
 
 ---
 
+## [1.2.0] — 2026-07-21
+
+### Added
+- **Spark roles** (Edit Spark → **Role**): **Head**, **Worker**, **Standalone** (replaces the Worker-node checkbox)
+  - **Head** — cluster head; local LLM always monitored; overview/header show a **Head** badge; MiniStat still shows live **vLLM / model id**
+  - **Worker** — no local LLM API (card hidden, ports not probed); optional **Worker label** (cluster/model name) and **Head Spark** picker; overview MiniStat shows **Worker** / label; header shows **Worker** + label badges
+  - **Standalone** — normal single-node Spark; optional **LLM monitoring** toggle (default on)
+- **Standalone LLM monitoring** — when Role is Standalone, enable/disable probing and the LLM card without making the Spark a worker
+- Role badges on Overview cards and Spark header (Head / Worker / Standalone)
+- Shared `resolveSparkRole` / `isLlmMonitoringEnabled` helpers (`src/api/sparkRole.ts`)
+
+### Fixed
+- **Shutdown “Failed to fetch”** — remote shutdown verifies script/`sudo -n`, then backgrounds so SSH returns before the host dies; only mid-session connection drops count as success; local Sparks acknowledge HTTP **before** power-off; Shutdown All does remotes first, local last
+- **Docker image build** — drop flaky second-stage `npm ci --omit=dev`; prune in builder and copy `node_modules`; retry on first `npm ci`
+- **Worker → Standalone** — switching role back to Standalone re-enables LLM monitoring (worker had forced it off)
+
+### Notes
+- `workerNode` remains derived (`role === "worker"`) for existing probe/card checks; prefer `role` in new code.
+- Legacy configs with only `workerNode: true` migrate to role **Worker**.
+- Thin alternative to contributor PR #9 (`llmCluster` topology) — same overview/worker UX via `workerLabel` + `workerHeadId`.
+
+---
+
 ## [1.1.7] — 2026-07-21
 
 ### Added

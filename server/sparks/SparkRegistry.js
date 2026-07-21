@@ -302,6 +302,8 @@ export class SparkRegistry {
       auth: sshIn.auth === "pass" ? "pass" : "key",
     };
     const llmPorts = this._normalizeLlmPorts(config.llmPorts ?? config.llmPort);
+    const role = this._normalizeRole(config);
+    const isWorker = role === "worker";
     // Never keep password on the persisted object
     return {
       id: config.id,
@@ -315,12 +317,47 @@ export class SparkRegistry {
       isLocal: Boolean(config.isLocal),
       ssh,
       llmPorts,
+      role,
       /** When true, this Spark is an LLM worker — no local API card / probe. */
-      workerNode: Boolean(config.workerNode),
+      workerNode: isWorker,
+      /** Optional cluster/model name for overview when role is worker. */
+      workerLabel: isWorker ? this._normalizeWorkerLabel(config.workerLabel) : null,
+      /** Optional head Spark id when role is worker. */
+      workerHeadId: isWorker
+        ? this._normalizeWorkerHeadId(config.workerHeadId, config.id)
+        : null,
+      /**
+       * Standalone: probe/show local LLM (default true).
+       * Head always on; worker always off.
+       */
+      llmMonitoring:
+        role === "worker" ? false : role === "head" ? true : config.llmMonitoring !== false,
       disabledDevices: Array.isArray(config.disabledDevices) ? config.disabledDevices : [],
       disabledInterfaces: Array.isArray(config.disabledInterfaces) ? config.disabledInterfaces : [],
       storagePollDisabled: Boolean(config.storagePollDisabled),
     };
+  }
+
+  /** Normalize role; legacy workerNode=true → worker. */
+  _normalizeRole(config) {
+    const role = config?.role;
+    if (role === "head" || role === "worker" || role === "standalone") return role;
+    return config?.workerNode ? "worker" : "standalone";
+  }
+
+  /** Trim optional worker label; empty → null. */
+  _normalizeWorkerLabel(value) {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+
+  /** Normalize optional head Spark id; empty or self → null. */
+  _normalizeWorkerHeadId(value, selfId) {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === selfId) return null;
+    return trimmed;
   }
 
   /** Normalize LLM ports: accepts array or single value, validates 1–65535, deduplicates. */

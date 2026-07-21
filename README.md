@@ -40,12 +40,14 @@ sparkDash is a real-time web dashboard for one or more **NVIDIA DGX Spark (GB10)
 
 ## Latest version changelog
 
-### Version 1.1.5 / 1.1.7
+### Version 1.1.5 / 1.1.7 / 1.2.0
 - **LLM decode benchmark** — **Run decode benchmark** on each LLM panel; multi-select concurrency (`1–32`, default **1, 2**); levels run one-by-one with concurrent streams per level
 - **Bench metrics** — **Server tok/s** (engine counters, aligned with live Generation tok/s) and **per-stream** decode after first token; TTFT; last run restored after refresh/restart
 - **GB10 GPU metrics** — host `gpu-memory.sh` + process list fallback when Docker / `nvidia-smi` apps are empty
 - **Mobile dialogs** — solid scrollable sheets for benchmark, Edit Spark, and Add Spark
 - **vLLM ops tiles** — KV cache %, run/wait requests, TTFT p95, cumulative preemptions (vLLM only; info tooltips on each)
+- **Spark roles** — **Head** / **Worker** / **Standalone** in Edit Spark; worker label + head picker; standalone **LLM monitoring** opt-in; role badges on Overview and Spark header
+- **Reliable shutdown** — background remote shutdown so the UI gets a real response (no “Failed to fetch” when the host drops SSH)
 
 Full history: [CHANGELOG.md](./CHANGELOG.md)
 
@@ -65,7 +67,7 @@ Full history: [CHANGELOG.md](./CHANGELOG.md)
 | **GPU processes** | See the top GPU processes by VRAM usage directly in the GPU panel, including process name and memory allocation |
 | **Spark uptime** | System uptime displayed inline on each Spark header for at-a-glance availability |
 | **Power controls** | Graceful shutdown (SSH host script) and Wake-on-LAN; batch actions on Overview |
-| **Worker node** | Flag Sparks that only run as distributed LLM workers — no local LLM card |
+| **Spark roles** | **Head** / **Worker** / **Standalone** — worker label + head link; standalone can disable LLM monitoring |
 | **Unified memory** | GB10 128 GB LPDDR5X pool (~273 GB/s), GPU/CPU split, bandwidth via `nvidia-smi dmon` |
 | **Themes** | Dark, light, cool white, OLED — neutral palettes, persisted in `localStorage` |
 | **Secrets** | SSH passwords AES-256-GCM encrypted; never in `sparks.json` or API responses |

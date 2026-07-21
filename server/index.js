@@ -1,6 +1,7 @@
 import express from "express";
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
+import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -520,6 +521,9 @@ app.post("/api/sparks/:id/llm/bench", (req, res) => {
   if (spark.workerNode) {
     return res.status(400).json({ error: "Worker nodes do not expose a local LLM API" });
   }
+  if (spark.llmMonitoring === false) {
+    return res.status(400).json({ error: "LLM monitoring is disabled for this Spark" });
+  }
 
   const monitor = monitors.get(req.params.id);
   const ports = Array.isArray(spark.llmPorts) && spark.llmPorts.length
@@ -624,24 +628,103 @@ app.delete("/api/sparks/:id/llm/bench/:benchId", (req, res) => {
 // These routes are unauthenticated like the rest of the LAN dashboard — do not
 // expose port 5555 beyond a trusted network.
 
-const SHUTDOWN_CMD = "sudo -n /usr/local/bin/spark-shutdown";
+const SHUTDOWN_BIN = "/usr/local/bin/spark-shutdown";
+/**
+ * Remote: verify script + passwordless sudo, then background shutdown so SSH
+ * returns before the host dies. Failures before backgrounding surface to the UI.
+ */
+const SHUTDOWN_REMOTE_CMD = [
+  `test -x ${SHUTDOWN_BIN} || { echo "missing ${SHUTDOWN_BIN}" >&2; exit 127; }`,
+  `sudo -n true || { echo "sudo -n required for ${SHUTDOWN_BIN}" >&2; exit 126; }`,
+  `nohup sudo -n ${SHUTDOWN_BIN} >/dev/null 2>&1 &`,
+  `sleep 0.3`,
+  `exit 0`,
+].join("; ");
 
 function shutdownErrorStatus(msg) {
-  if (/timed out|connection refused|unreachable|no route/i.test(msg)) return 503;
+  if (/timed out|connection refused|unreachable|no route|ECONNREFUSED|ETIMEDOUT/i.test(msg)) {
+    return 503;
+  }
   return 500;
+}
+
+/**
+ * Only treat "host dropped the SSH session mid-shutdown" as success.
+ * Connect timeouts / auth / missing script must remain real errors.
+ */
+function isBenignShutdownSshError(msg) {
+  return /ECONNRESET|Connection reset|broken pipe|Connection closed by remote|closed by remote host|Connection to .* closed/i.test(
+    String(msg || "")
+  );
+}
+
+/**
+ * Kick off graceful shutdown. Always aims to return quickly so the browser
+ * gets a real JSON response instead of "Failed to fetch" when the SSH session
+ * drops as the host powers off.
+ */
+function initiateSparkShutdown(spark) {
+  if (spark.isLocal) {
+    return new Promise((resolve, reject) => {
+      try {
+        const child = spawn("sudo", ["-n", SHUTDOWN_BIN], {
+          detached: true,
+          stdio: "ignore",
+        });
+        child.on("error", (err) => {
+          const msg = err.message || String(err);
+          if (/ENOENT|not found/i.test(msg)) {
+            reject(new Error(`${SHUTDOWN_BIN} not found on this host`));
+          } else {
+            reject(new Error(msg));
+          }
+        });
+        child.unref();
+        resolve("Shutdown initiated");
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  return sshExec(spark, SHUTDOWN_REMOTE_CMD, { timeoutMs: 8000 })
+    .then(() => "Shutdown initiated")
+    .catch((err) => {
+      const msg = err.message || String(err);
+      if (isBenignShutdownSshError(msg)) {
+        return "Shutdown initiated";
+      }
+      throw err;
+    });
 }
 
 /** Batch routes first so they never collide with /:id/* if routing changes. */
 app.post("/api/sparks/shutdown-all", async (_req, res) => {
   const results = [];
-  for (const spark of registry.sparks) {
+  // Remotes first, local last — shutting down the dashboard host mid-loop would
+  // skip remaining Sparks.
+  const ordered = [
+    ...registry.sparks.filter((s) => !s.isLocal),
+    ...registry.sparks.filter((s) => s.isLocal),
+  ];
+  for (const spark of ordered) {
     const monitor = monitors.get(spark.id);
     if (!monitor?.online) {
       results.push({ id: spark.id, ok: false, skipped: true, error: "Offline — skipped" });
       continue;
     }
     try {
-      await sshExec(spark, SHUTDOWN_CMD);
+      // Local dashboard host: acknowledge before power-off kills this process.
+      if (spark.isLocal) {
+        results.push({ id: spark.id, ok: true, message: "Shutdown initiated" });
+        setImmediate(() => {
+          void initiateSparkShutdown(spark).catch((err) => {
+            console.error(`[shutdown-all] local ${spark.id}:`, err.message);
+          });
+        });
+        continue;
+      }
+      await initiateSparkShutdown(spark);
       results.push({ id: spark.id, ok: true });
     } catch (err) {
       results.push({ id: spark.id, ok: false, error: err.message || String(err) });
@@ -678,9 +761,21 @@ app.post("/api/sparks/:id/shutdown", async (req, res) => {
     const spark = registry.getSpark(req.params.id);
     if (!spark) return res.status(404).json({ error: "Spark not found" });
 
+    // Local: send JSON first, then power off — otherwise the process dies mid-response
+    // and the UI shows "Failed to fetch".
+    if (spark.isLocal) {
+      res.json({ success: true, message: "Shutdown initiated" });
+      setImmediate(() => {
+        void initiateSparkShutdown(spark).catch((err) => {
+          console.error(`[shutdown] local ${spark.id}:`, err.message);
+        });
+      });
+      return;
+    }
+
     try {
-      const result = await sshExec(spark, SHUTDOWN_CMD);
-      res.json({ success: true, message: "Shutdown initiated", output: result });
+      const message = await initiateSparkShutdown(spark);
+      res.json({ success: true, message, output: message });
     } catch (err) {
       const msg = err.message || String(err);
       res.status(shutdownErrorStatus(msg)).json({

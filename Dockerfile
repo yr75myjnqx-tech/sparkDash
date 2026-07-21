@@ -12,13 +12,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ make python3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy package files and install
+# Copy package files and install (retry — npm in Docker can flake with
+# "Exit handler never called!" on a single long ci run)
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund \
+  || (echo "npm ci failed once — retrying…" && npm cache clean --force && npm ci --no-audit --no-fund)
 
 # Copy source and build
 COPY . .
 RUN npm run build
+
+# Drop devDependencies so the runtime image can copy node_modules
+# (avoids a second `npm ci --omit=dev`, which has been flaky in Docker:
+# "Exit handler never called!")
+RUN npm prune --omit=dev --no-audit --no-fund \
+  || (npm install --omit=dev --no-audit --no-fund && npm prune --omit=dev --no-audit --no-fund)
 
 # ============================================================
 # Production image — lean runtime
@@ -32,17 +40,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy built frontend assets
+# Copy built frontend, pruned deps, and server
 COPY --from=builder /app/dist ./dist
-
-# Copy server code + package files
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/package-lock.json ./package-lock.json
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/config ./config
-
-# Install production deps only
-RUN npm ci --omit=dev
 
 # Volume for persistent sparks.json
 VOLUME /app/config

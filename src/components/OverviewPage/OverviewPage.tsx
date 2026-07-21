@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { SparkSnapshot } from "../../api/types";
+import { resolveSparkRole } from "../../api/sparkRole";
 import { shutdownAllSparks, wakeAllSparks } from "../../api/client";
 import { MetricBar } from "../ui/MetricBar";
 import { ActivityIcon, PowerOffIcon, PowerOnIcon } from "../ui/icons";
@@ -62,7 +63,17 @@ function MiniStat({
   );
 }
 
-function SparkCard({ spark, temperatureUnit, onSelect }: { spark: SparkSnapshot; temperatureUnit: "celsius" | "fahrenheit"; onSelect?: (id: string) => void }) {
+function SparkCard({
+  spark,
+  headSparkName,
+  temperatureUnit,
+  onSelect,
+}: {
+  spark: SparkSnapshot;
+  headSparkName?: string | null;
+  temperatureUnit: "celsius" | "fahrenheit";
+  onSelect?: (id: string) => void;
+}) {
   const gpu = spark.metrics.gpu;
   const um = spark.metrics.unifiedMemory;
   const online = spark.online;
@@ -107,6 +118,29 @@ function SparkCard({ spark, temperatureUnit, onSelect }: { spark: SparkSnapshot;
             spark.name
           )}
         </span>
+        {(() => {
+          const role = resolveSparkRole(spark);
+          const text =
+            role === "head" ? "Head" : role === "worker" ? "Worker" : "Standalone";
+          const title =
+            role === "head"
+              ? "Cluster head Spark"
+              : role === "worker"
+                ? spark.workerLabel?.trim()
+                  ? `${spark.workerLabel.trim()} · distributed LLM worker`
+                  : "Distributed LLM worker"
+                : spark.llmMonitoring === false
+                  ? "Standalone — LLM monitoring off"
+                  : "Standalone Spark";
+          return (
+            <span
+              className="shrink-0 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent"
+              title={title}
+            >
+              {text}
+            </span>
+          );
+        })()}
         <span className="text-[10px] uppercase tracking-wide text-muted">
           {online ? "online" : "offline"}
         </span>
@@ -178,7 +212,25 @@ function SparkCard({ spark, temperatureUnit, onSelect }: { spark: SparkSnapshot;
               return null;
             })()}
             {(() => {
-              // Find first available LLM for the overview card
+              const role = resolveSparkRole(spark);
+
+              // Workers have no local LLM API — show cluster/model label instead.
+              if (role === "worker") {
+                const label = spark.workerLabel?.trim() || "distributed";
+                const title = headSparkName
+                  ? `${label} · worker of ${headSparkName}`
+                  : `${label} · distributed LLM worker`;
+                return (
+                  <MiniStat
+                    label="Worker"
+                    value={label}
+                    tone="accent"
+                    title={title}
+                  />
+                );
+              }
+
+              // Head / Standalone: same as before — live backend + model id.
               const llmArr = spark.metrics.llm;
               const llm = Array.isArray(llmArr) ? llmArr.find((l) => l.available) : null;
               if (!llm) return null;
@@ -335,7 +387,17 @@ export function OverviewPage({ sparks, hideOffline = false, temperatureUnit = "c
       </div>
       <div className="overview-page grid gap-[18px] sm:grid-cols-2 lg:grid-cols-3">
         {visibleSparks.map((spark) => (
-          <SparkCard key={spark.id} spark={spark} temperatureUnit={temperatureUnit} onSelect={onSelectSpark} />
+          <SparkCard
+            key={spark.id}
+            spark={spark}
+            headSparkName={
+              spark.workerHeadId
+                ? sparks.find((s) => s.id === spark.workerHeadId)?.name ?? null
+                : null
+            }
+            temperatureUnit={temperatureUnit}
+            onSelect={onSelectSpark}
+          />
         ))}
       </div>
     </div>

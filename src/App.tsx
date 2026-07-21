@@ -30,6 +30,10 @@ function placeholderSnapshot(
     llmPort: llmPorts[0] ?? 8888,
     llmPorts,
     workerNode: false,
+    role: "standalone",
+    workerLabel: null,
+    workerHeadId: null,
+    llmMonitoring: true,
     hardware: {
       device: "NVIDIA DGX Spark",
       cpuModel: "…",
