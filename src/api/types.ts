@@ -134,12 +134,19 @@ export interface NetworkInterface {
   disabled?: boolean;
 }
 
+export interface IbInterface {
+  name: string;
+  rxSpeed: number;
+  txSpeed: number;
+}
+
 export interface NetworkMetrics {
   primaryInterface: string | null;
   linkSpeedMbps: number | null;
   interfaces: NetworkInterface[];
   /** MAC of enP7s7 when present (same value persisted as detectedMacAddress). */
   wolMac?: string | null;
+  ibInterfaces?: IbInterface[];
 }
 
 // ─── Unified memory metrics ──────────────────────────────

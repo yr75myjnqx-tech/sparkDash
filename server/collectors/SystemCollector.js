@@ -109,7 +109,8 @@ export class SystemCollector {
       }
       const linkSpeed = primaryInterface ? await this._getNetworkLinkSpeedMbps(primaryInterface) : null;
       const wolMac = await this._getWolInterfaceMac();
-      return { primaryInterface, linkSpeedMbps: linkSpeed, interfaces, wolMac };
+      const ibInterfaces = await this._getIbMetrics();
+      return { primaryInterface, linkSpeedMbps: linkSpeed, interfaces, wolMac, ibInterfaces };
     } catch (err) {
       console.error(`[SystemCollector] Network error for ${this.spark.id}:`, err.message);
       return this._defaultNetwork();
@@ -747,6 +748,205 @@ export class SystemCollector {
     }
   }
 
+  // ─── IB/RDMA helpers ────────────────────────────────────────
+  /**
+   * Discover InfiniBand/RDMA devices and read port counters from sysfs.
+   * Counters are in units of 4-byte dwords; converted to bytes for speed calc.
+   * @returns {Promise<Array<{name: string, rxSpeed: number, txSpeed: number}>>}
+   */
+  async _getIbMetrics() {
+    const ibSysDir = path.join(HOST_PATHS.SYS, "class/infiniband");
+    const interfaces = [];
+    try {
+      if (!fs.existsSync(ibSysDir)) return interfaces;
+
+      const devices = fs.readdirSync(ibSysDir).filter((d) => {
+        try {
+          const netDir = path.join(ibSysDir, d, "device/net");
+          return fs.existsSync(netDir) && fs.statSync(netDir).isDirectory();
+        } catch {
+          return false;
+        }
+      });
+
+      for (const dev of devices) {
+        const portsDir = path.join(ibSysDir, dev, "ports");
+        let portNums;
+        try {
+          portNums = fs.readdirSync(portsDir).filter((p) => /^\d+$/.test(p));
+        } catch {
+          continue;
+        }
+
+        for (const portNum of portNums) {
+          // Find the net interface name(s) backed by this IB device/port
+          const netDir = path.join(ibSysDir, dev, "device/net");
+          let netIfaces;
+          try {
+            netIfaces = fs.readdirSync(netDir);
+          } catch {
+            continue;
+          }
+
+          for (const netIface of netIfaces) {
+            // Read raw counter values (4-byte dword units)
+            const rxRaw = this._readIbCounter(dev, portNum, "port_rcv_data");
+            const txRaw = this._readIbCounter(dev, portNum, "port_xmit_data");
+
+            const now = Date.now();
+            const lastKey = `ib:${dev}:${portNum}:${netIface}`;
+            const last = this.lastNetworkStats.get(lastKey) || { rxBytes: 0, txBytes: 0, time: now };
+
+            // Convert from 4-byte dwords to bytes
+            const rxBytes = rxRaw * 4;
+            const txBytes = txRaw * 4;
+
+            const dtSec = (now - last.time) / 1000;
+            let rxSpeed = 0;
+            let txSpeed = 0;
+            if (dtSec > 0 && last.rxBytes > 0) {
+              rxSpeed = Math.max(0, (rxBytes - last.rxBytes) / dtSec);
+              txSpeed = Math.max(0, (txBytes - last.txBytes) / dtSec);
+            }
+            this.lastNetworkStats.set(lastKey, { rxBytes, txBytes, time: now });
+
+            interfaces.push({
+              name: netIface,
+              rxSpeed: Math.round(rxSpeed),
+              txSpeed: Math.round(txSpeed),
+            });
+          }
+        }
+      }
+    } catch {
+      // IB discovery is optional
+    }
+    return interfaces;
+  }
+
+  /**
+   * Read a single IB counter file from sysfs.
+   * Counters are at /sys/class/infiniband/<dev>/ports/<port>/counters/<name>
+   * Values are in 4-byte dword units.
+   * @returns {number} Raw counter value
+   */
+  _readIbCounter(dev, portNum, name) {
+    try {
+      const counterPath = path.join(HOST_PATHS.SYS, "class/infiniband", dev, "ports", portNum, "counters", name);
+      const raw = fs.readFileSync(counterPath, "utf-8").trim();
+      const n = parseInt(raw, 10);
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Discover IB/RDMA devices on a remote host via SSH and read port counters.
+   * @returns {Promise<Array<{name: string, rxSpeed: number, txSpeed: number}>>}
+   */
+  async _getRemoteIbMetrics() {
+    const interfaces = [];
+    try {
+      // Discover IB device directories that have net interfaces
+      const discoverCmd =
+        'for d in /sys/class/infiniband/*/device/net; do ' +
+        'if [ -d "$d" ]; then ' +
+        'dev="$(basename "$(dirname "$(dirname "$d")")")"; ' +
+        'for nif in "$d"/*; do ' +
+        'echo "$dev:$(basename "$nif")"; ' +
+        'done; ' +
+        'fi; ' +
+        'done';
+      const devOut = await sshExec(this.spark, discoverCmd);
+      const devLines = devOut.trim().split("\n").filter(Boolean);
+      if (devLines.length === 0) return interfaces;
+
+      // Build a command to read counters for all discovered devices/ports
+      const counterCmds = [];
+      const entries = [];
+      for (const line of devLines) {
+        const colonIdx = line.indexOf(":");
+        if (colonIdx <= 0) continue;
+        const device = line.slice(0, colonIdx);
+        const netIface = line.slice(colonIdx + 1);
+        entries.push({ device, netIface });
+
+        // We need to find port numbers — list ports dir
+        counterCmds.push(
+          `ls /sys/class/infiniband/${device}/ports/ 2>/dev/null | grep -E '^[0-9]+$'`
+        );
+      }
+
+      // Fetch port numbers for each device in one SSH call
+      const portCmd = [...new Set(entries.map((e) =>
+        `echo "${e.device}:$(ls /sys/class/infiniband/${e.device}/ports/ 2>/dev/null | grep -E '^[0-9]+$' | head -1)"`
+      ))].join("; ");
+
+      let portOut = "";
+      if (portCmd) {
+        portOut = await sshExec(this.spark, portCmd);
+      }
+
+      // Build device -> port mapping
+      const devicePortMap = new Map();
+      for (const rawLine of portOut.split("\n")) {
+        const idx = rawLine.indexOf(":");
+        if (idx > 0) {
+          const dev = rawLine.slice(0, idx);
+          const port = rawLine.slice(idx + 1).trim();
+          if (port) devicePortMap.set(dev, port);
+        }
+      }
+
+      // Read all counters in one SSH call
+      const counterReadCmds = [];
+      for (const { device, netIface } of entries) {
+        const portNum = devicePortMap.get(device);
+        if (!portNum) continue;
+        const dir = `/sys/class/infiniband/${device}/ports/${portNum}/counters`;
+        counterReadCmds.push(
+          `echo "${device}:${portNum}:${netIface}:$(cat ${dir}/port_rcv_data 2>/dev/null || echo 0):$(cat ${dir}/port_xmit_data 2>/dev/null || echo 0)"`
+        );
+      }
+
+      if (counterReadCmds.length === 0) return interfaces;
+
+      const counterOut = await sshExec(this.spark, counterReadCmds.join("; "));
+      const now = Date.now();
+
+      for (const rawLine of counterOut.split("\n")) {
+        const parts = rawLine.split(":");
+        if (parts.length < 5) continue;
+        const [device, portNum, netIface, rxRawStr, txRawStr] = parts;
+        const rxRaw = parseInt(rxRawStr, 10) || 0;
+        const txRaw = parseInt(txRawStr, 10) || 0;
+
+        const rxBytes = rxRaw * 4;
+        const txBytes = txRaw * 4;
+        const lastKey = `ib:${device}:${portNum}:${netIface}`;
+        const last = this.lastNetworkStats.get(lastKey) || { rxBytes: 0, txBytes: 0, time: now };
+        const dtSec = (now - last.time) / 1000;
+        let rxSpeed = 0;
+        let txSpeed = 0;
+        if (dtSec > 0 && last.rxBytes > 0) {
+          rxSpeed = Math.max(0, (rxBytes - last.rxBytes) / dtSec);
+          txSpeed = Math.max(0, (txBytes - last.txBytes) / dtSec);
+        }
+        this.lastNetworkStats.set(lastKey, { rxBytes, txBytes, time: now });
+
+        interfaces.push({
+          name: netIface,
+          rxSpeed: Math.round(rxSpeed),
+          txSpeed: Math.round(txSpeed),
+        });
+      }
+    } catch {
+      // Remote IB discovery is optional
+    }
+    return interfaces;
+  }
+
   // ─── Unified memory helpers ───────────────────────────────
   async _getUnifiedMemory() {
     const raw = await this._readHostFile("/proc/meminfo");
@@ -1092,7 +1292,8 @@ export class SystemCollector {
         }
       }
 
-      return { primaryInterface, linkSpeedMbps, interfaces: tagged, wolMac };
+      const ibInterfaces = await this._getRemoteIbMetrics();
+      return { primaryInterface, linkSpeedMbps, interfaces: tagged, wolMac, ibInterfaces };
     } catch (err) {
       console.error(`[SystemCollector] Remote Network error for ${this.spark.id}:`, err.message);
       return this._defaultNetwork();
@@ -1286,7 +1487,7 @@ export class SystemCollector {
   }
 
   _defaultNetwork() {
-    return { primaryInterface: null, linkSpeedMbps: null, interfaces: [], wolMac: null };
+    return { primaryInterface: null, linkSpeedMbps: null, interfaces: [], wolMac: null, ibInterfaces: [] };
   }
 
   _defaultUnifiedMemory() {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { NetworkMetrics } from "../../api/types";
+import type { NetworkMetrics, IbInterface } from "../../api/types";
 import { updateDisabledInterfaces } from "../../api/client";
 import { Panel } from "../ui/Panel";
 import { NetworkIcon, GearIcon } from "../ui/icons";
@@ -168,6 +168,24 @@ export function NetworkPanel({
               })
             )}
           </div>
+
+          {network?.ibInterfaces && network.ibInterfaces.length > 0 && (
+            <div className="mt-3 space-y-2 border-t border-border pt-3">
+              <div className="text-[10px] uppercase tracking-wide text-muted">RDMA InfiniBand</div>
+              {network.ibInterfaces
+                .filter((ib: IbInterface) => ib.rxSpeed > 0 || ib.txSpeed > 0)
+                .map((ib: IbInterface) => (
+                  <div key={ib.name} className="flex items-center justify-between rounded-md border border-border bg-surface-elevated px-3 py-2">
+                    <span className="text-xs text-text">{ib.name}</span>
+                    <span className="font-tabular text-xs text-text">
+                      <span className="text-accent">↑</span> {formatSpeed(ib.txSpeed)}
+                      <span className="mx-1.5 text-border">·</span>
+                      <span className="text-accent">↓</span> {formatSpeed(ib.rxSpeed)}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
         </>
       )}
     </Panel>
