@@ -213,3 +213,94 @@ export interface SparkTestResponse {
 export interface ApiError {
   error: string;
 }
+
+// ─── LLM decode benchmark ────────────────────────────────
+export interface DecodeBenchConfig {
+  port: number;
+  modelId: string | null;
+  concurrencies: number[];
+  maxTokens: number;
+}
+
+export interface DecodeBenchStreamResult {
+  index: number;
+  ttftMs: number;
+  decodeTps: number;
+  decodeTokens: number;
+  completionTokens: number;
+  totalMs: number;
+  error: string | null;
+}
+
+/** One concurrency wave (all streams at that concurrency). */
+export interface DecodeBenchLevelResult {
+  concurrency: number;
+  streamsOk: number;
+  streamsFailed: number;
+  /** Mean per-stream decode tok/s after first token */
+  meanDecodeTps: number;
+  medianDecodeTps: number;
+  minDecodeTps: number;
+  maxDecodeTps: number;
+  meanTtftMs: number;
+  medianTtftMs: number;
+  /** Client: total post-first-token tokens / concurrent decode window */
+  aggregateDecodeTps: number;
+  /**
+   * Median server-side generation tok/s from live-style /metrics polls during the wave.
+   * Null when the backend does not expose counters.
+   */
+  serverGenerationTps: number | null;
+  /** Peak sample of server generation tok/s during the wave */
+  serverGenerationTpsMax?: number | null;
+  /** Number of positive rate samples collected from the engine */
+  serverGenerationSamples?: number;
+  totalDecodeTokens: number;
+  totalCompletionTokens: number;
+  durationMs: number;
+  error: string | null;
+  streams: DecodeBenchStreamResult[];
+  model: string | null;
+}
+
+export interface DecodeBenchProgress {
+  currentConcurrency: number | null;
+  completedLevels: number;
+  totalLevels: number;
+  message: string;
+}
+
+export interface DecodeBenchJob {
+  benchId: string;
+  sparkId: string;
+  status: "running" | "completed" | "failed" | "cancelled";
+  startedAt: number;
+  completedAt: number | null;
+  config: DecodeBenchConfig;
+  progress: DecodeBenchProgress;
+  results: DecodeBenchLevelResult[];
+  error: string | null;
+  durationMs: number;
+}
+
+export interface DecodeBenchDefaults {
+  allowedConcurrencies: number[];
+  defaultMaxTokens: number;
+  minMaxTokens: number;
+  maxMaxTokens: number;
+}
+
+export interface DecodeBenchListResponse {
+  active: DecodeBenchJob | null;
+  /** Most recent finished job (optionally for a given port) */
+  last: DecodeBenchJob | null;
+  history: DecodeBenchJob[];
+  defaults: DecodeBenchDefaults;
+}
+
+export interface StartDecodeBenchRequest {
+  port?: number;
+  concurrencies: number[];
+  maxTokens?: number;
+  modelId?: string | null;
+}

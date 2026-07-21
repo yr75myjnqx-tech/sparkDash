@@ -1,6 +1,6 @@
 {
   "name": "sparkdash",
-  "version": "1.1.0",
+  "version": "1.1.5",
   "description": "sparkDash — Multi-DGX Spark Monitoring Dashboard",
   "type": "module",
   "scripts": {
@@ -18,7 +18,15 @@
     "docker:rebuild": "docker compose up --build -d",
     "frontend": "npm run build"
   },
-  "keywords": ["nvidia", "dgx-spark", "gb10", "monitoring", "dashboard", "gpu", "llm"],
+  "keywords": [
+    "nvidia",
+    "dgx-spark",
+    "gb10",
+    "monitoring",
+    "dashboard",
+    "gpu",
+    "llm"
+  ],
   "author": "Mia'a AI Lab",
   "homepage": "https://x.com/MiaAI_lab",
   "license": "MIT",

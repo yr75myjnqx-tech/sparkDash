@@ -11,6 +11,10 @@ import { sshExec, sshTest, llmTest } from "./collectors/ssh.js";
 import { validateSparkTarget, createRateLimiter } from "./validate.js";
 import { getSettings, updateSettings, loadSettings } from "./settings.js";
 import { broadcastForLanIp, effectiveMac, normalizeMac, sendWol } from "./wol.js";
+import {
+  decodeBenchManager,
+  DECODE_BENCH_DEFAULTS,
+} from "./collectors/DecodeBench.js";
 
 dotenv.config();
 
@@ -479,6 +483,10 @@ app.delete("/api/sparks/:id/llm-ports/:port", (req, res) => {
     }
 
     const currentPorts = spark.llmPorts || [];
+    // Primary (first) port cannot be removed — only additional ports
+    if (currentPorts[0] === port) {
+      return res.status(400).json({ error: "Cannot remove the primary LLM port" });
+    }
     const newPorts = currentPorts.filter((p) => p !== port);
     if (newPorts.length === 0) {
       return res.status(400).json({ error: "Cannot remove the last LLM port" });
@@ -500,59 +508,96 @@ app.delete("/api/sparks/:id/llm-ports/:port", (req, res) => {
   }
 });
 
-app.post("/api/sparks/:id/llm/bench", async (req, res) => {
-  const monitor = monitors.get(req.params.id);
-  if (!monitor) return res.status(404).json({ error: "Spark not found" });
-
+/**
+ * Decode throughput benchmark (streaming, post-first-token tok/s).
+ *
+ * POST body: { port?, concurrencies: number[], maxTokens? }
+ * Returns immediately with a bench job; poll GET for progress/results.
+ */
+app.post("/api/sparks/:id/llm/bench", (req, res) => {
   const spark = registry.getSpark(req.params.id);
   if (!spark) return res.status(404).json({ error: "Spark not found" });
+  if (spark.workerNode) {
+    return res.status(400).json({ error: "Worker nodes do not expose a local LLM API" });
+  }
 
-  const port = resolveLlmPort(spark);
-  const url = `http://${spark.lanIp}:${port}/v1/chat/completions`;
-  const modelId = monitor.snapshot().metrics.llm?.modelId || null;
+  const monitor = monitors.get(req.params.id);
+  const ports = Array.isArray(spark.llmPorts) && spark.llmPorts.length
+    ? spark.llmPorts
+    : [resolveLlmPort(spark)];
 
-  const prompt = "Write an extremely detailed and lengthy essay about the history, technology, and future of artificial intelligence. Cover major milestones, key techniques like deep learning and transformers, and discuss societal impacts. Keep writing with more examples and analysis.";
+  let port = req.body?.port != null ? Number(req.body.port) : ports[0];
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return res.status(400).json({ error: "Invalid port" });
+  }
+
+  // Resolve model id for this port from live snapshot when possible
+  let modelId = req.body?.modelId || null;
+  if (!modelId && monitor) {
+    const snap = monitor.snapshot();
+    const llmList = Array.isArray(snap?.metrics?.llm) ? snap.metrics.llm : [];
+    const portIndex = ports.indexOf(port);
+    const llm =
+      (portIndex >= 0 ? llmList[portIndex] : null) ||
+      llmList.find((m) => m?.available) ||
+      llmList[0];
+    modelId = llm?.modelId || null;
+  }
 
   try {
-    const start = Date.now();
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: modelId || undefined,
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: 2000,
-        temperature: 0.7,
-        ignore_eos: true,
-        stop: [],
-      }),
-      signal: AbortSignal.timeout(120_000),
+    const job = decodeBenchManager.start({
+      sparkId: spark.id,
+      lanIp: spark.lanIp,
+      port,
+      modelId,
+      concurrencies: req.body?.concurrencies,
+      maxTokens: req.body?.maxTokens,
     });
-    const totalMs = Date.now() - start;
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      return res.status(502).json({ ok: false, message: `vLLM returned ${response.status}: ${text.slice(0, 200)}` });
-    }
-
-    const data = await response.json();
-    const promptTokens = data.usage?.prompt_tokens ?? 0;
-    const completionTokens = data.usage?.completion_tokens ?? 0;
-    const genTps = totalMs > 0 && completionTokens > 0
-      ? Math.round((completionTokens / totalMs) * 1000 * 100) / 100
-      : 0;
-
-    res.json({
-      ok: true,
-      promptTokens,
-      completionTokens,
-      totalMs,
-      generationTps: genTps,
-      modelId: data.model || modelId,
-    });
+    res.status(202).json(job);
   } catch (err) {
-    res.status(500).json({ ok: false, message: err.message });
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message });
   }
+});
+
+app.get("/api/sparks/:id/llm/bench", (req, res) => {
+  const spark = registry.getSpark(req.params.id);
+  if (!spark) return res.status(404).json({ error: "Spark not found" });
+  const active = decodeBenchManager.getActive(spark.id);
+  const history = decodeBenchManager.getHistory(spark.id);
+  const portRaw = req.query.port;
+  const port =
+    portRaw != null && portRaw !== ""
+      ? parseInt(String(portRaw), 10)
+      : null;
+  const last = decodeBenchManager.getLast(
+    spark.id,
+    Number.isInteger(port) ? port : null
+  );
+  res.json({
+    active,
+    last,
+    history,
+    defaults: DECODE_BENCH_DEFAULTS,
+  });
+});
+
+app.get("/api/sparks/:id/llm/bench/:benchId", (req, res) => {
+  const spark = registry.getSpark(req.params.id);
+  if (!spark) return res.status(404).json({ error: "Spark not found" });
+  const job = decodeBenchManager.getJob(req.params.benchId);
+  if (!job || job.sparkId !== spark.id) {
+    return res.status(404).json({ error: "Benchmark not found" });
+  }
+  res.json(job); // already public shape from manager
+});
+
+app.delete("/api/sparks/:id/llm/bench/:benchId", (req, res) => {
+  const spark = registry.getSpark(req.params.id);
+  if (!spark) return res.status(404).json({ error: "Spark not found" });
+  const job = decodeBenchManager.cancel(spark.id, req.params.benchId);
+  if (!job) return res.status(404).json({ error: "Benchmark not found" });
+  res.json(job);
 });
 
 // ─── Power management ────────────────────────────────────

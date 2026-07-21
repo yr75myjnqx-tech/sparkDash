@@ -114,14 +114,15 @@ export function SparkPage({ spark, temperatureUnit, onEdit }: SparkPageProps) {
           <>
             {llmPorts.map((port, i) => {
               const llmMetrics = metrics.llm?.[i] ?? null;
+              // First port is primary — only additional ports can be removed
+              const canRemove = i > 0;
               return (
                 <LlmPanel
                   key={port}
                   llm={llmMetrics}
                   sparkId={spark.id}
                   llmPort={port}
-                  llmPortsCount={llmPorts.length}
-                  onRemovePort={llmPorts.length > 1 ? handleRemovePort : undefined}
+                  onRemovePort={canRemove ? handleRemovePort : undefined}
                   className="md:col-span-2"
                 />
               );

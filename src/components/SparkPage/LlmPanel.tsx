@@ -4,12 +4,12 @@ import { updateLlmPort } from "../../api/client";
 import { Sparkline } from "../ui/Sparkline";
 import { Panel } from "../ui/Panel";
 import { BotIcon, GearIcon } from "../ui/icons";
+import { BenchmarkDialog } from "./BenchmarkDialog";
 
 interface LlmPanelProps {
   llm: LlmMetrics | null;
   sparkId: string;
   llmPort: number;
-  llmPortsCount?: number;
   onRemovePort?: (port: number) => void;
   className?: string;
 }
@@ -33,13 +33,14 @@ function BackendBadge({ backend }: { backend: string | null }) {
   );
 }
 
-export function LlmPanel({ llm, sparkId, llmPort, llmPortsCount = 1, onRemovePort, className }: LlmPanelProps) {
+export function LlmPanel({ llm, sparkId, llmPort, onRemovePort, className }: LlmPanelProps) {
   const [genHistory, setGenHistory] = useState<number[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [portDraft, setPortDraft] = useState(String(llmPort));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [engineInfoOpen, setEngineInfoOpen] = useState(false);
+  const [benchOpen, setBenchOpen] = useState(false);
   const engineInfoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearEngineInfoTimer = useCallback(() => {
@@ -106,14 +107,15 @@ export function LlmPanel({ llm, sparkId, llmPort, llmPortsCount = 1, onRemovePor
       className={`panel-llm ${className}`}
       actions={
         <div className="flex items-center gap-1.5">
-          {llmPortsCount > 1 && onRemovePort && (
+          {onRemovePort && (
             <button
               type="button"
               title={`Remove port ${llmPort}`}
               onClick={() => onRemovePort(llmPort)}
               className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-danger transition-colors hover:bg-danger/10"
             >
-              ×
+              <span aria-hidden>×</span>
+              <span>Remove</span>
             </button>
           )}
           <button
@@ -300,8 +302,26 @@ export function LlmPanel({ llm, sparkId, llmPort, llmPortsCount = 1, onRemovePor
               </div>
             </div>
           </div>
+
+          <div className="border-t border-border pt-3">
+            <button
+              type="button"
+              onClick={() => setBenchOpen(true)}
+              className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs font-medium text-text transition-colors hover:border-accent hover:bg-accent-soft"
+            >
+              Run decode benchmark
+            </button>
+          </div>
         </div>
       )}
+
+      <BenchmarkDialog
+        open={benchOpen}
+        onClose={() => setBenchOpen(false)}
+        sparkId={sparkId}
+        llmPort={llmPort}
+        modelId={llm?.modelId ?? null}
+      />
     </Panel>
   );
 }

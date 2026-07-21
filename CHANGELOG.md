@@ -7,6 +7,35 @@ Format: version sections are listed newest first.
 
 ---
 
+## [1.1.5] — 2026-07-21
+
+### Added
+- **LLM decode benchmark**
+  - **Run decode benchmark** on each LLM panel (when a model is available)
+  - Multi-select **concurrency** levels (`1, 2, 3, 4, 6, 8, 16, 32`); default selection **1, 2**
+  - Levels run **one after another**; within a level, N streams fire together
+  - Each concurrent stream uses a **distinct JSON/HTML write-style prompt** (higher decode tok/s workloads)
+  - Configurable **max tokens per stream** (default **500**, range 64–2048); input allows clearing digits while typing
+  - Async jobs: `POST` starts → poll status; one active bench per Spark; cancel supported
+  - Results show **Server tok/s** (live-style engine counter samples, same idea as Generation tok/s) and **Per-stream** decode after first token, plus TTFT and stream OK counts
+  - Last run **persisted** (`config/bench-history.json`) and restored when reopening the dialog (survives refresh / restart)
+  - Mobile-friendly solid sheet (portaled to `document.body`, scrollable body, sticky footer)
+- **Remove additional LLM ports** — only non-primary ports show **Remove**; server rejects deleting the first port
+
+### Fixed
+- **GB10 GPU used / process list** (unified memory + Docker)
+  - Host helper `config/gpu-memory.sh` writes safe JSON: used sum, **MemTotal** as pool size, process list (Python JSON; env-configurable path)
+  - `SystemCollector` hydrates process cache from `gpu-memory.json` when in-container `compute-apps` is empty
+  - Generated `config/gpu-memory.json` gitignored and no longer tracked
+  - Supersedes contributor PR #10 (no machine-specific SSH mounts in compose)
+- **Mobile Edit / Add Spark dialogs** — solid max-height sheet, scrollable form, sticky actions, body scroll lock (can reach all fields on phone)
+
+### Notes
+- Decode bench hits the real LLM endpoint over LAN; use off-peak for high concurrency.
+- Host cron for GPU file (example): `* * * * * /path/to/sparkDash/config/gpu-memory.sh` with `./config` bind-mounted into Docker.
+
+---
+
 ## [1.1.0] — 2026-07-20
 
 ### Added

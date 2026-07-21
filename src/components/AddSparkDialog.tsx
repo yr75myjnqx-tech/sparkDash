@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { addSpark, testSparkConfig } from "../api/client";
 import type { SparkConfig } from "../api/types";
 
@@ -36,6 +37,15 @@ export function AddSparkDialog({ open, onClose, onAdded, defaultLlmPort = 8888 }
   const [error, setError] = useState<string | null>(null);
 
   useEscape(onClose);
+
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
 
   // Pre-fill LLM ports from settings when dialog opens
   useEffect(() => {
@@ -111,16 +121,24 @@ export function AddSparkDialog({ open, onClose, onAdded, defaultLlmPort = 8888 }
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      className="modal-overlay"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="panel w-full max-w-md p-6">
-        <h2 className="mb-4 text-sm font-semibold text-text-strong">Add Spark</h2>
+      <div
+        className="modal-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-spark-title"
+      >
+        <div className="modal-sheet__header" id="add-spark-title">
+          Add Spark
+        </div>
 
+        <div className="modal-sheet__body">
         <div className="space-y-3">
           <div>
             <label className="mb-1 block text-xs text-muted">Name</label>
@@ -238,30 +256,37 @@ export function AddSparkDialog({ open, onClose, onAdded, defaultLlmPort = 8888 }
         {error && (
           <div className="mt-3 rounded bg-danger/20 px-3 py-2 text-xs text-danger">{error}</div>
         )}
+        </div>
 
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            onClick={handleTest}
-            disabled={testing || !config.lanIp}
-            className="rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-muted hover:bg-surface-hover disabled:opacity-50"
-          >
-            {testing ? "Testing..." : "Test"}
-          </button>
-          <button
-            onClick={onClose}
-            className="rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-muted hover:bg-surface-hover"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving || !config.name || !config.lanIp}
-            className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save"}
-          </button>
+        <div className="modal-sheet__footer">
+          <div className="modal-sheet__footer-actions" style={{ marginLeft: "auto" }}>
+            <button
+              type="button"
+              onClick={handleTest}
+              disabled={testing || !config.lanIp}
+              className="rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-muted hover:bg-surface-hover disabled:opacity-50"
+            >
+              {testing ? "Testing..." : "Test"}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-muted hover:bg-surface-hover"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !config.name || !config.lanIp}
+              className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

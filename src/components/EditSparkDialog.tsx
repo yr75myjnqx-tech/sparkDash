@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   deleteSpark,
   fetchSparks,
@@ -50,6 +51,16 @@ export function EditSparkDialog({
   const [savedPasswordNote, setSavedPasswordNote] = useState<string | null>(null);
 
   useEscape(onClose);
+
+  // Prevent background scroll while the tall form is open (iOS)
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open || !sparkId) {
@@ -233,175 +244,184 @@ export function EditSparkDialog({
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      className="modal-overlay"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="panel w-full max-w-md p-6">
-        <h2 className="mb-4 text-sm font-semibold text-text-strong">Edit Spark</h2>
+      <div
+        className="modal-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-spark-title"
+      >
+        <div className="modal-sheet__header" id="edit-spark-title">
+          Edit Spark
+        </div>
 
-        {loading && <p className="text-xs text-muted">Loading…</p>}
+        <div className="modal-sheet__body">
+          {loading && <p className="text-xs text-muted">Loading…</p>}
 
-        {config && !loading && (
-          <div className="space-y-3">
-            <div>
-              <label className="mb-1 block text-xs text-muted">Name</label>
-              <input
-                type="text"
-                value={config.name}
-                onChange={(e) => update({ name: e.target.value })}
-                className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
-              />
-            </div>
+          {config && !loading && (
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs text-muted">Name</label>
+                <input
+                  type="text"
+                  value={config.name}
+                  onChange={(e) => update({ name: e.target.value })}
+                  className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
+                />
+              </div>
 
-            <div>
-              <label className="mb-1 block text-xs text-muted">LAN IP</label>
-              <input
-                type="text"
-                value={config.lanIp}
-                onChange={(e) => update({ lanIp: e.target.value })}
-                className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
-              />
-            </div>
+              <div>
+                <label className="mb-1 block text-xs text-muted">LAN IP</label>
+                <input
+                  type="text"
+                  value={config.lanIp}
+                  onChange={(e) => update({ lanIp: e.target.value })}
+                  className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
+                />
+              </div>
 
-            <div>
-              <label className="mb-1 block text-xs text-muted">CX7 IP (optional)</label>
-              <input
-                type="text"
-                value={config.cx7Ip || ""}
-                onChange={(e) => update({ cx7Ip: e.target.value || null })}
-                className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
-              />
-            </div>
+              <div>
+                <label className="mb-1 block text-xs text-muted">CX7 IP (optional)</label>
+                <input
+                  type="text"
+                  value={config.cx7Ip || ""}
+                  onChange={(e) => update({ cx7Ip: e.target.value || null })}
+                  className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
+                />
+              </div>
 
-            <div>
-              <label className="mb-1 block text-xs text-muted">
-                MAC Address (Wake-on-LAN override)
+              <div>
+                <label className="mb-1 block text-xs text-muted">
+                  MAC Address (Wake-on-LAN override)
+                </label>
+                <input
+                  type="text"
+                  value={config.macAddress || ""}
+                  onChange={(e) => update({ macAddress: e.target.value || null })}
+                  placeholder={
+                    config.detectedMacAddress
+                      ? `Auto: ${config.detectedMacAddress}`
+                      : "Auto from enP7s7 when online"
+                  }
+                  className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
+                />
+                <p className="mt-1 text-[10px] text-muted">
+                  {config.detectedMacAddress
+                    ? `Using enP7s7 automatically (${config.detectedMacAddress}). Leave blank to keep auto, or enter a different MAC.`
+                    : "Leave blank to use enP7s7 once the Spark has been online and detected."}
+                </p>
+              </div>
+
+              <label className="flex items-center gap-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={config.isLocal}
+                  onChange={(e) => update({ isLocal: e.target.checked })}
+                  className="rounded border-border"
+                />
+                This host (local collectors — no SSH for metrics)
               </label>
-              <input
-                type="text"
-                value={config.macAddress || ""}
-                onChange={(e) => update({ macAddress: e.target.value || null })}
-                placeholder={
-                  config.detectedMacAddress
-                    ? `Auto: ${config.detectedMacAddress}`
-                    : "Auto from enP7s7 when online"
-                }
-                className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
-              />
-              <p className="mt-1 text-[10px] text-muted">
-                {config.detectedMacAddress
-                  ? `Using enP7s7 automatically (${config.detectedMacAddress}). Leave blank to keep auto, or enter a different MAC.`
-                  : "Leave blank to use enP7s7 once the Spark has been online and detected."}
-              </p>
-            </div>
 
-            <label className="flex items-center gap-2 text-xs text-muted">
-              <input
-                type="checkbox"
-                checked={config.isLocal}
-                onChange={(e) => update({ isLocal: e.target.checked })}
-                className="rounded border-border"
-              />
-              This host (local collectors — no SSH for metrics)
-            </label>
+              <label className="flex items-center gap-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={Boolean(config.workerNode)}
+                  onChange={(e) => update({ workerNode: e.target.checked })}
+                  className="rounded border-border"
+                />
+                <span>Worker node</span>
+                <span
+                  className="inline-flex shrink-0 cursor-help text-muted hover:text-text"
+                  title="Check this when this Spark is a distributed-LLM worker (no local OpenAI-style API). The LLM card on this Spark will be inactive / hidden, and LLM ports will not be probed."
+                  aria-label="When checked, the LLM card is not shown on this Spark because workers do not expose a local model API."
+                >
+                  <InfoIcon className="h-3.5 w-3.5" />
+                </span>
+              </label>
 
-            <label className="flex items-center gap-2 text-xs text-muted">
-              <input
-                type="checkbox"
-                checked={Boolean(config.workerNode)}
-                onChange={(e) => update({ workerNode: e.target.checked })}
-                className="rounded border-border"
-              />
-              <span>Worker node</span>
-              <span
-                className="inline-flex shrink-0 text-muted hover:text-text cursor-help"
-                title="Check this when this Spark is a distributed-LLM worker (no local OpenAI-style API). The LLM card on this Spark will be inactive / hidden, and LLM ports will not be probed."
-                aria-label="When checked, the LLM card is not shown on this Spark because workers do not expose a local model API."
-              >
-                <InfoIcon className="h-3.5 w-3.5" />
-              </span>
-            </label>
-
-            {!config.isLocal && (
-              <>
-                <div>
-                  <label className="mb-1 block text-xs text-muted">SSH User</label>
-                  <input
-                    type="text"
-                    value={config.ssh.user}
-                    onChange={(e) => updateSsh({ user: e.target.value })}
-                    className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs text-muted">SSH Auth</label>
-                  <select
-                    value={config.ssh.auth}
-                    onChange={(e) => updateSsh({ auth: e.target.value as "key" | "pass" })}
-                    className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
-                  >
-                    <option value="key">Key</option>
-                    <option value="pass">Password</option>
-                  </select>
-                </div>
-
-                {config.ssh.auth === "pass" && (
+              {!config.isLocal && (
+                <>
                   <div>
-                    <label className="mb-1 block text-xs text-muted">
-                      SSH Password
-                      {config.ssh.hasPassword
-                        ? " (leave blank to keep stored secret)"
-                        : " (required — saved even if host is offline)"}
-                    </label>
+                    <label className="mb-1 block text-xs text-muted">SSH User</label>
                     <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      type="text"
+                      value={config.ssh.user}
+                      onChange={(e) => updateSsh({ user: e.target.value })}
                       className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
-                      autoComplete="new-password"
-                      placeholder={config.ssh.hasPassword ? "••••••••" : "Enter password"}
                     />
-                    {config.ssh.hasPassword ? (
-                      <p className="mt-1 text-[10px] text-muted">
-                        Password is stored encrypted on this server. Offline Sparks still keep it
-                        and reconnect automatically when back up.
-                      </p>
-                    ) : (
-                      <p className="mt-1 text-[10px] text-warning">
-                        Enter once and Save (or Test). Stored encrypted — host does not need to be
-                        online.
-                      </p>
-                    )}
-                    {savedPasswordNote && (
-                      <p className="mt-1 text-[10px] text-success">{savedPasswordNote}</p>
-                    )}
                   </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
 
-        {testResult && (
-          <div
-            className={`mt-3 rounded px-3 py-2 text-xs ${
-              testResult.ok ? "bg-success/20 text-success" : "bg-danger/20 text-danger"
-            }`}
-          >
-            {testResult.message}
-          </div>
-        )}
+                  <div>
+                    <label className="mb-1 block text-xs text-muted">SSH Auth</label>
+                    <select
+                      value={config.ssh.auth}
+                      onChange={(e) => updateSsh({ auth: e.target.value as "key" | "pass" })}
+                      className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
+                    >
+                      <option value="key">Key</option>
+                      <option value="pass">Password</option>
+                    </select>
+                  </div>
 
-        {error && (
-          <div className="mt-3 rounded bg-danger/20 px-3 py-2 text-xs text-danger">{error}</div>
-        )}
+                  {config.ssh.auth === "pass" && (
+                    <div>
+                      <label className="mb-1 block text-xs text-muted">
+                        SSH Password
+                        {config.ssh.hasPassword
+                          ? " (leave blank to keep stored secret)"
+                          : " (required — saved even if host is offline)"}
+                      </label>
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full rounded border border-border bg-surface-elevated px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
+                        autoComplete="new-password"
+                        placeholder={config.ssh.hasPassword ? "••••••••" : "Enter password"}
+                      />
+                      {config.ssh.hasPassword ? (
+                        <p className="mt-1 text-[10px] text-muted">
+                          Password is stored encrypted on this server. Offline Sparks still keep it
+                          and reconnect automatically when back up.
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-[10px] text-warning">
+                          Enter once and Save (or Test). Stored encrypted — host does not need to be
+                          online.
+                        </p>
+                      )}
+                      {savedPasswordNote && (
+                        <p className="mt-1 text-[10px] text-success">{savedPasswordNote}</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
-        <div className="mt-4 flex items-center justify-between gap-2">
+          {testResult && (
+            <div
+              className={`mt-3 rounded px-3 py-2 text-xs ${
+                testResult.ok ? "bg-success/20 text-success" : "bg-danger/20 text-danger"
+              }`}
+            >
+              {testResult.message}
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-3 rounded bg-danger/20 px-3 py-2 text-xs text-danger">{error}</div>
+          )}
+        </div>
+
+        <div className="modal-sheet__footer">
           <button
             type="button"
             onClick={handleDelete}
@@ -410,7 +430,7 @@ export function EditSparkDialog({
           >
             {saving ? "Removing…" : "Remove"}
           </button>
-          <div className="flex items-center gap-2">
+          <div className="modal-sheet__footer-actions">
             <button
               type="button"
               onClick={handleTest}
@@ -437,6 +457,7 @@ export function EditSparkDialog({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

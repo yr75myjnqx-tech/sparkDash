@@ -1,4 +1,11 @@
-import type { Settings, SparkConfig, SparkTestResponse } from "./types";
+import type {
+  DecodeBenchJob,
+  DecodeBenchListResponse,
+  Settings,
+  SparkConfig,
+  SparkTestResponse,
+  StartDecodeBenchRequest,
+} from "./types";
 
 const BASE = "";
 
@@ -111,19 +118,41 @@ export function refreshSparkMetric(
   return apiFetch(`/api/sparks/${id}/refresh/${domain}`, { method: "POST" });
 }
 
-// ─── LLM benchmark ────────────────────────────────────
-export interface BenchResult {
-  ok: boolean;
-  promptTokens?: number;
-  completionTokens?: number;
-  totalMs?: number;
-  generationTps?: number;
-  modelId?: string | null;
-  message?: string;
+// ─── LLM decode benchmark ─────────────────────────────
+/** Start an async decode bench (returns 202 job). */
+export function startDecodeBench(
+  id: string,
+  body: StartDecodeBenchRequest
+): Promise<DecodeBenchJob> {
+  return apiFetch(`/api/sparks/${id}/llm/bench`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
-export function runLlmBench(id: string): Promise<BenchResult> {
-  return apiFetch(`/api/sparks/${id}/llm/bench`, { method: "POST" });
+export function getDecodeBench(
+  id: string,
+  benchId: string
+): Promise<DecodeBenchJob> {
+  return apiFetch(`/api/sparks/${id}/llm/bench/${benchId}`);
+}
+
+export function listDecodeBench(
+  id: string,
+  port?: number
+): Promise<DecodeBenchListResponse> {
+  const q =
+    port != null && Number.isInteger(port) ? `?port=${encodeURIComponent(port)}` : "";
+  return apiFetch(`/api/sparks/${id}/llm/bench${q}`);
+}
+
+export function cancelDecodeBench(
+  id: string,
+  benchId: string
+): Promise<DecodeBenchJob> {
+  return apiFetch(`/api/sparks/${id}/llm/bench/${benchId}`, {
+    method: "DELETE",
+  });
 }
 
 // ─── LLM probe ports (per Spark) ─────────────────────────
