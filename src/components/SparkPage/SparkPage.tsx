@@ -233,6 +233,7 @@ export function SparkPage({ spark, temperatureUnit, onEdit }: SparkPageProps) {
               /* Hosts: GPU spans the full left column; RAM → Network → Storage [→ Tailnet] stack in the right column */
               <>
                 <GpuPanel
+                  key={spark.id}
                   gpu={metrics.gpu}
                   unifiedMemory={metrics.unifiedMemory}
                   sparkId={spark.id}
@@ -265,6 +266,7 @@ export function SparkPage({ spark, temperatureUnit, onEdit }: SparkPageProps) {
               /* Resources layout: GPU spans the full left column; Storage + Network [+ Tailnet] stack in the right column */
               <>
                 <GpuPanel
+                  key={spark.id}
                   gpu={metrics.gpu}
                   cpu={metrics.cpu}
                   unifiedMemory={metrics.unifiedMemory}
