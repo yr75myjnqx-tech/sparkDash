@@ -51,9 +51,11 @@ It also supports **non-Spark units**: any Linux machine with an NVIDIA GPU (e.g.
 
 ## Latest version changelog
 
-### Version 1.8.6 — prefill benchmark
-- **Prefill benchmark** on the LLM card: sweep context sizes from 1k to 300k, report prefill tok/s (`prompt_tokens` ÷ TTFT) and TTFT. Unique prefix per size so prefix-cache does not inflate later runs. Timeouts scale with size (up to 45 min).
-- **CPU temperature** on remote Sparks (Overview bar + GPU panel row when above 0°C).
+### Version 1.8.7 — local build on upstream 1.8.6
+- **Fleet storage tiers** — fleet **Storage** view: disks classified **Hot / Warm / Cold**, model inventory, resident-vs-CX7-fabric placement
+- **NV_ERR_NO_MEMORY counter** — per-Spark kernel-driver error count (host journal / SSH) with a reset baseline in the GPU panel
+- Includes upstream **1.8.6** — prefill benchmark (1k–300k context sweep) and DGX Spark CPU temperature
+
 
 Full history: [CHANGELOG.md](./CHANGELOG.md)
 
