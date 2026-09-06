@@ -4,6 +4,7 @@ import { resolveSparkRole } from "../../api/sparkRole";
 import { shutdownAllSparks, updateAllHermes, wakeAllSparks } from "../../api/client";
 import { ConfirmShutdownDialog } from "../ConfirmShutdownDialog";
 import { MetricBar } from "../ui/MetricBar";
+import { SpeedGauge } from "../ui/SpeedGauge";
 import { ActivityIcon, PowerOffIcon, PowerOnIcon, RotateIcon } from "../ui/icons";
 
 interface OverviewPageProps {
@@ -11,6 +12,8 @@ interface OverviewPageProps {
   hideOffline?: boolean;
   temperatureUnit?: "celsius" | "fahrenheit";
   onSelectSpark?: (id: string) => void;
+  /** "gauges" renders the same cards with tok/s speedometers (Gauges tab). */
+  variant?: "overview" | "gauges";
 }
 
 function celsiusToFahrenheit(c: number): number {
@@ -78,11 +81,14 @@ function SparkCard({
   headSparkName,
   temperatureUnit,
   onSelect,
+  tokDisplay = "stats",
 }: {
   spark: SparkSnapshot;
   headSparkName?: string | null;
   temperatureUnit: "celsius" | "fahrenheit";
   onSelect?: (id: string) => void;
+  /** "gauges" swaps the tok/s numbers for prefill/gen speedometer dials. */
+  tokDisplay?: "stats" | "gauges";
 }) {
   const gpu = spark.metrics.gpu;
   const um = spark.metrics.unifiedMemory;
@@ -356,6 +362,14 @@ function SparkCard({
             const llmArr = spark.metrics.llm;
             const llm = Array.isArray(llmArr) ? llmArr.find((l) => l.available) : null;
             if (!llm) return null;
+            if (tokDisplay === "gauges") {
+              return (
+                <div className="mt-3.5 flex flex-col gap-3 border-t border-border pt-3">
+                  <SpeedGauge label="Generation" value={llm.generationTps} floor={100} />
+                  <SpeedGauge label="Prefill" value={llm.prefillTps} floor={1000} />
+                </div>
+              );
+            }
             return (
               <div className="mt-3.5 grid grid-cols-2 gap-2 border-t border-border pt-3">
                 <div className="text-center">
@@ -379,7 +393,7 @@ function SparkCard({
   );
 }
 
-export function OverviewPage({ sparks, hideOffline = false, temperatureUnit = "celsius", onSelectSpark }: OverviewPageProps) {
+export function OverviewPage({ sparks, hideOffline = false, temperatureUnit = "celsius", onSelectSpark, variant = "overview" }: OverviewPageProps) {
   const visibleSparks = hideOffline ? sparks.filter((s) => s.online) : sparks;
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchMsg, setBatchMsg] = useState<{ text: string; tone: "ok" | "err" } | null>(null);
@@ -534,7 +548,7 @@ export function OverviewPage({ sparks, hideOffline = false, temperatureUnit = "c
           className="font-normal leading-tight tracking-tight text-text-strong"
           style={{ fontSize: "var(--density-overview-title)" }}
         >
-          Overview
+          {variant === "gauges" ? "Gauges" : "Overview"}
         </h1>
         <div className="flex flex-wrap items-end justify-end gap-3">
           {batchMsg && (
@@ -646,6 +660,7 @@ export function OverviewPage({ sparks, hideOffline = false, temperatureUnit = "c
             }
             temperatureUnit={temperatureUnit}
             onSelect={onSelectSpark}
+            tokDisplay={variant === "gauges" ? "gauges" : "stats"}
           />
         ))}
       </div>

@@ -13,7 +13,7 @@ import { ShowcasePage } from "./components/ShowcasePage/ShowcasePage";
 import { ThemeSwitch } from "./components/ThemeSwitch";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { GearIcon, BoltIcon } from "./components/ui/icons";
-import { OVERVIEW_ID, FLEET_STORAGE_ID } from "./constants";
+import { OVERVIEW_ID, FLEET_STORAGE_ID, GAUGES_ID } from "./constants";
 import type { Settings, SparkSnapshot } from "./api/types";
 
 function placeholderSnapshot(
@@ -142,7 +142,8 @@ function DashboardApp() {
 
   const isOverview = activeId === OVERVIEW_ID;
   const isFleetStorage = activeId === FLEET_STORAGE_ID;
-  const displayActive = isOverview
+  const isGauges = activeId === GAUGES_ID;
+  const displayActive = isOverview || isGauges
     ? null
     : displaySparks.find((s) => s.id === activeId) || displaySparks[0] || activeSpark || null;
 
@@ -215,10 +216,10 @@ function DashboardApp() {
           );
         })
       );
-      if (configs.length && activeId !== OVERVIEW_ID && !configs.some((c) => c.id === activeId)) {
+      if (configs.length && activeId !== OVERVIEW_ID && activeId !== GAUGES_ID && !configs.some((c) => c.id === activeId)) {
         setActiveId(configs[0].id);
       }
-      if (configs.length === 0 && activeId !== OVERVIEW_ID) setActiveId(null);
+      if (configs.length === 0 && activeId !== OVERVIEW_ID && activeId !== GAUGES_ID) setActiveId(null);
     } catch (err) {
       console.error("Failed to refresh sparks:", err);
     }
@@ -272,8 +273,9 @@ function DashboardApp() {
         <main>
           {isFleetStorage ? (
             <FleetStoragePage sparks={displaySparks} />
-          ) : isOverview ? (
+          ) : isOverview || isGauges ? (
             <OverviewPage
+              variant={isGauges ? "gauges" : "overview"}
               sparks={displaySparks}
               hideOffline={settings?.autoHideOffline ?? false}
               temperatureUnit={settings?.temperatureUnit ?? "celsius"}
