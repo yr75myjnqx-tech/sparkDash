@@ -82,8 +82,8 @@ export function SpeedGauge({ label, value, floor = 100 }: SpeedGaugeProps) {
     <div className="flex flex-col items-center gap-0.5">
       <span className="text-[10px] uppercase tracking-wide text-muted">{label}</span>
       <svg
-        width={132}
-        height={96}
+        width={200}
+        height={146}
         viewBox="0 0 132 96"
         className="block max-w-full"
         role="img"
