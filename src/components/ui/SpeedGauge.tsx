@@ -129,8 +129,7 @@ export function SpeedGauge({ label, value, max, fallbackScale = false }: SpeedGa
         height={146}
         viewBox="-4 0 140 96"
         className="block max-w-full"
-        role="img"
-        aria-label={`${label} ${Math.round(value)} tok/s`}
+        aria-hidden="true"
       >
         {/* outer scale segments, alternating neutral shading */}
         {segs.map((i) => (
