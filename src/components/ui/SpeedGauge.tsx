@@ -6,8 +6,9 @@
  * as LlmDailyChart.
  *
  * The scale adapts to the live value (nice 1/2/5×10ⁿ ceiling at least `floor`
- * and 25% headroom) so the dial stays meaningful on any hardware; the zones
- * are fractions of the current scale.
+ * and 25% headroom) unless a fixed `max` is given; the zones are fractions
+ * of the current scale. At or past a fixed max the pointer pins at max and
+ * turns red.
  */
 
 const CX = 60;
@@ -69,13 +70,16 @@ interface SpeedGaugeProps {
   value: number;
   /** Minimum scale maximum — keeps the dial readable when idle. */
   floor?: number;
+  /** Fixed scale maximum (tok/s). Omit or null for an adaptive scale. */
+  max?: number | null;
 }
 
 const SEGMENTS = 10;
 
-export function SpeedGauge({ label, value, floor = 100 }: SpeedGaugeProps) {
-  const max = scaleMax(value, floor);
-  const pct = Math.max(0, Math.min(1, value / max));
+export function SpeedGauge({ label, value, floor = 100, max = null }: SpeedGaugeProps) {
+  const scale = max && max > 0 ? max : scaleMax(value, floor);
+  const pct = Math.max(0, Math.min(1, value / scale));
+  const over = max != null && max > 0 && value >= max;
   const segs = Array.from({ length: SEGMENTS }, (_, i) => i);
 
   return (
@@ -110,7 +114,7 @@ export function SpeedGauge({ label, value, floor = 100 }: SpeedGaugeProps) {
               fontSize={7}
               fill="var(--color-muted)"
             >
-              {fmt(frac * max)}
+              {fmt(frac * scale)}
             </text>
           );
         })}
@@ -123,7 +127,8 @@ export function SpeedGauge({ label, value, floor = 100 }: SpeedGaugeProps) {
             opacity={0.85}
           />
         ))}
-        {/* needle (drawn pointing right, rotated to the value) */}
+        {/* needle (drawn pointing right, rotated to the value); theme-aware
+            (dark on light, light on dark), red when pinned over a fixed max */}
         <g
           style={{
             transform: `rotate(${180 * (pct - 1)}deg)`,
@@ -136,12 +141,17 @@ export function SpeedGauge({ label, value, floor = 100 }: SpeedGaugeProps) {
             y1={CY}
             x2={CX + R_INNER - 4}
             y2={CY}
-            stroke="var(--color-success)"
+            stroke={over ? "var(--color-danger)" : "var(--color-text-strong)"}
             strokeWidth={2.5}
             strokeLinecap="round"
           />
         </g>
-        <circle cx={CX} cy={CY} r={3} fill="var(--color-success)" />
+        <circle
+          cx={CX}
+          cy={CY}
+          r={3}
+          fill={over ? "var(--color-danger)" : "var(--color-text-strong)"}
+        />
         {/* digital readout below the pivot */}
         <text
           x={CX}
