@@ -84,7 +84,7 @@ export function SpeedGauge({ label, value, floor = 100, max = null }: SpeedGauge
 
   return (
     <div className="flex flex-col items-center gap-0.5">
-      <span className="text-[10px] uppercase tracking-wide text-muted">{label}</span>
+      <span className="text-[11px] font-bold uppercase tracking-wide text-text">{label}</span>
       <svg
         width={200}
         height={146}
@@ -157,7 +157,7 @@ export function SpeedGauge({ label, value, floor = 100, max = null }: SpeedGauge
           x={CX}
           y={CY + 26}
           textAnchor="middle"
-          fontSize={17}
+          fontSize={14}
           fontWeight={700}
           fill="var(--color-text-strong)"
           className="font-tabular"

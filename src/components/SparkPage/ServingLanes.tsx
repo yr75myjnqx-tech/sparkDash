@@ -72,7 +72,7 @@ export function ServingLanes({ llm, maxNumSeqs }: ServingLanesProps) {
     llm.ttftP95Seconds != null
       ? llm.ttftP95Seconds < 1
         ? `${Math.round(llm.ttftP95Seconds * 1000)}ms`
-        : `${llm.ttftP95Seconds.toFixed(2)}s`
+        : `${llm.ttftP95Seconds.toFixed(1)}s`
       : "—";
   const kv =
     llm.kvCacheUsage != null ? `${(llm.kvCacheUsage * 100).toFixed(0)}%` : "—";
@@ -84,7 +84,10 @@ export function ServingLanes({ llm, maxNumSeqs }: ServingLanesProps) {
         : llm.kvCacheUsage >= 0.5
           ? "text-warning"
           : "text-success";
-  const tps = llm.generationTps != null ? Math.round(llm.generationTps) : null;
+  const prefix =
+    llm.prefixCacheHitRate != null
+      ? `${(llm.prefixCacheHitRate * 100).toFixed(0)}%`
+      : "—";
 
   return (
     <div className="space-y-2 border-t border-border pt-3">
@@ -158,11 +161,9 @@ export function ServingLanes({ llm, maxNumSeqs }: ServingLanesProps) {
         </div>
         <div className="space-y-0.5">
           <div className="text-[10px] uppercase tracking-wide text-muted">
-            Gen tok/s
+            Prefix Cache
           </div>
-          <div className="font-tabular text-xs text-text">
-            {tps != null ? tps.toLocaleString() : "—"}
-          </div>
+          <div className="font-tabular text-xs text-text">{prefix}</div>
         </div>
       </div>
     </div>
