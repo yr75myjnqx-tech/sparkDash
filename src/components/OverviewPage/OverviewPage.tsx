@@ -124,6 +124,7 @@ function SparkCard({
   // the 2 s telemetry cadence, same ring-buffer infrastructure as GpuPanel.
   const tempHistory = useMetricsHistoryTail(spark.id, "gpu.temp");
   const usageHistory = useMetricsHistoryTail(spark.id, "gpu.usage");
+  const cpuTempHistory = useMetricsHistoryTail(spark.id, "cpu.temp");
 
   const usage = gpu?.usage ?? 0;
   const tempRaw = gpu?.temperature ?? 0;
@@ -325,10 +326,28 @@ function SparkCard({
                 temperatureUnit === "fahrenheit" ? celsiusToFahrenheit(cpuRaw) : cpuRaw;
               const cpuLabel =
                 temperatureUnit === "fahrenheit" ? `${cpuDisplay}°F` : `${cpuDisplay}°C`;
+              const cpuTrend = describeTrend(cpuTempHistory, 0.5);
               return (
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-xs text-muted">CPU</span>
-                  <span className="font-tabular text-sm text-text">{cpuLabel}</span>
+                <div className="space-y-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-xs text-muted">CPU</span>
+                    <span className="font-tabular text-sm text-text">{cpuLabel}</span>
+                  </div>
+                  {/* Same fixed 20–95 °C domain as the GPU line (I-1): the
+                      two temperature lines are directly comparable. */}
+                  <Sparkline
+                    data={cpuTempHistory}
+                    domain={DISPLAY.TEMP_DOMAIN_C}
+                    width={300}
+                    height={26}
+                    fullWidth
+                    axisLabel="axis 20–95 °C"
+                    summary={
+                      cpuTrend
+                        ? `CPU temperature ${cpuDisplay} degrees Celsius, ${cpuTrend} over the last 5 minutes`
+                        : `CPU temperature ${cpuDisplay} degrees Celsius`
+                    }
+                  />
                 </div>
               );
             })()}

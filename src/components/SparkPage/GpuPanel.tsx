@@ -160,10 +160,10 @@ export function GpuPanel({ gpu, cpu, unifiedMemory, sparkId, temperatureUnit, cl
           spark={
             <Sparkline
               data={cpuTempHistory}
-              domain={[20, 105]}
+              domain={DISPLAY.TEMP_DOMAIN_C}
               color={cpuTempColor}
               width={180}
-              axisLabel="axis 20–105 °C"
+              axisLabel={`axis 20–95 °C, warn ≥ ${DISPLAY.TEMP_WARN_C} °C, throttle line ${DISPLAY.TEMP_THROTTLE_C} °C`}
               summary={`CPU temperature ${cpuTemperature} degrees Celsius over the last 5 minutes`}
             />
           }

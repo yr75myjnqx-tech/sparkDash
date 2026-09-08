@@ -137,21 +137,41 @@ export function SpeedGauge({ label, value, max, fallbackScale = false }: SpeedGa
             key={i}
             d={annularSector(i / SEGMENTS + 0.012, (i + 1) / SEGMENTS - 0.012, R_OUTER, R_OUTER - 9)}
             fill={i % 2 === 0 ? "var(--color-border)" : "var(--color-surface-hover)"}
-            opacity={i % 2 === 0 ? 0.55 : 1}
+            opacity={i % 2 === 0 ? 0.7 : 1}
           />
         ))}
-        {/* scale numbers (0 → max); the max is always printed so the scale's
-            context is visible next to the needle (Addendum A). */}
+        {/* major tick marks at the labelled fractions — give the dial visible
+            structure in both themes (labels alone were illegible at 7px muted). */}
         {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
-          const p = polar(frac, R_OUTER + 8);
+          const t1 = polar(frac, R_OUTER + 0.5);
+          const t2 = polar(frac, R_OUTER + 3.5);
+          return (
+            <line
+              key={`tick-${frac}`}
+              x1={t1.x}
+              y1={t1.y}
+              x2={t2.x}
+              y2={t2.y}
+              stroke="var(--color-text-strong)"
+              strokeWidth={frac === 0 || frac === 1 ? 1.4 : 1}
+              opacity={0.75}
+            />
+          );
+        })}
+        {/* scale numbers (0 → max); the max is always printed so the scale's
+            context is visible next to the needle (Addendum A). Same five
+            positions on every dial, one formatter — comparable across cards. */}
+        {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
+          const p = polar(frac, R_OUTER + 9);
           return (
             <text
-              key={frac}
+              key={`label-${frac}`}
               x={p.x}
-              y={p.y + 2.5}
+              y={p.y + 2.8}
               textAnchor="middle"
-              fontSize={7}
-              fill="var(--color-muted)"
+              fontSize={8}
+              fontWeight={600}
+              fill="var(--color-text)"
             >
               {fmt(frac * scale)}
             </text>
