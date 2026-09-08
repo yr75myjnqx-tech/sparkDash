@@ -7,9 +7,25 @@ import {
   HARDWARE_DEFAULTS,
   TIER_DEFAULTS,
   WEIGHT_EXTENSIONS,
+  POLL_INTERVAL_NVERR,
 } from "../config.js";
 import { normalizeMac, WOL_INTERFACE } from "../wol.js";
 import { sshExec } from "./ssh.js";
+
+const NVERR_JOURNAL_CMD =
+  'journalctl -k --no-pager -q --grep=NV_ERR_NO_MEMORY 2>/dev/null | grep -c NV_ERR_NO_MEMORY || true';
+
+/**
+ * Parse `grep -c` stdout into a non-negative integer. Exported for tests.
+ * @param {unknown} raw
+ * @returns {number}
+ */
+export function parseNvErrNoMemoryCount(raw) {
+  const line = String(raw ?? "").trim().split("\n").pop() ?? "";
+  const n = Number.parseInt(line, 10);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return n;
+}
 
 /**
  * Classify a storage device into a tier: "hot" | "warm" | "cold".
@@ -95,6 +111,8 @@ export class SystemCollector {
 
     // Cached hardware info
     this._hardwareInfo = null;
+    /** Cached NVRM NV_ERR_NO_MEMORY count (slow journal scan). */
+    this._nvErrCache = { count: 0, at: 0 };
   }
 
   /** Collect GPU metrics (temperature, usage, power, VRAM). */
@@ -344,6 +362,7 @@ export class SystemCollector {
       vram,
       processes,
       throttle: gpu.throttle,
+      nvErrNoMemory: await this._nvErrNoMemory(),
     };
   }
 
@@ -1199,6 +1218,7 @@ export class SystemCollector {
         vram: { used: usedMB, total: totalMB, percentage, available: availableMB },
         processes,
         throttle: gpu.throttle,
+        nvErrNoMemory: await this._nvErrNoMemory(),
       };
     } catch (err) {
       console.error(`[SystemCollector] Remote GPU error for ${this.spark.id}:`, err.message);
@@ -1666,7 +1686,7 @@ export class SystemCollector {
         });
       }
     }
-    return this._readHostFile(`/proc/net/${relPath}`);
+    return fs.readFileSync(`/proc/net/${relPath}`, "utf-8");
   }
 
   /** Lightweight liveness for local Sparks. */
@@ -1717,6 +1737,34 @@ export class SystemCollector {
     return fs.promises.statfs(dir);
   }
 
+  /**
+   * Count NVRM `NV_ERR_NO_MEMORY` lines in the kernel journal since boot.
+   * Cached for POLL_INTERVAL_NVERR — never on the 2s GPU/memory loop uncached.
+   * @returns {Promise<number>}
+   */
+  async _nvErrNoMemory() {
+    const now = Date.now();
+    if (this._nvErrCache.at > 0 && now - this._nvErrCache.at < POLL_INTERVAL_NVERR) {
+      return this._nvErrCache.count;
+    }
+    try {
+      let out;
+      if (this.spark.isLocal) {
+        out = this._hasHostProc()
+          ? await this._execOnHost(NVERR_JOURNAL_CMD)
+          : await this._exec(NVERR_JOURNAL_CMD);
+      } else {
+        out = await sshExec(this.spark, NVERR_JOURNAL_CMD, { timeoutMs: 8000 });
+      }
+      const count = parseNvErrNoMemoryCount(out);
+      this._nvErrCache = { count, at: now };
+      return count;
+    } catch {
+      this._nvErrCache.at = now;
+      return this._nvErrCache.count;
+    }
+  }
+
   // ─── Default metrics ─────────────────────────────────────
   _defaultGpu() {
     return {
@@ -1726,6 +1774,7 @@ export class SystemCollector {
       vram: { used: 0, total: 0, percentage: 0, available: 0 },
       processes: [],
       throttle: this._defaultThrottle(),
+      nvErrNoMemory: 0,
     };
   }
 

@@ -20,7 +20,7 @@ mock.module("../ssh.js", {
 });
 
 // Import after registering the mock so SystemCollector picks up the stubbed sshExec.
-const { SystemCollector } = await import("../SystemCollector.js");
+const { SystemCollector, parseNvErrNoMemoryCount } = await import("../SystemCollector.js");
 
 const MEMINFO =
   "MemTotal:       8000000 kB\nMemFree:        1000000 kB\nMemAvailable:   2000000 kB\n";
@@ -76,4 +76,17 @@ test("nvErrNoMemory: defaults to 0 when the remote SSH journal call throws", asy
 
   failSsh = false;
   assert.equal(result.nvErrNoMemory, 0);
+});
+
+test("parseNvErrNoMemoryCount reads grep -c output", () => {
+  assert.equal(parseNvErrNoMemoryCount("12"), 12);
+  assert.equal(parseNvErrNoMemoryCount("0"), 0);
+  assert.equal(parseNvErrNoMemoryCount(" 43\n"), 43);
+});
+
+test("parseNvErrNoMemoryCount defaults invalid input to 0", () => {
+  assert.equal(parseNvErrNoMemoryCount(""), 0);
+  assert.equal(parseNvErrNoMemoryCount("not-a-number"), 0);
+  assert.equal(parseNvErrNoMemoryCount(undefined), 0);
+  assert.equal(parseNvErrNoMemoryCount("-3"), 0);
 });

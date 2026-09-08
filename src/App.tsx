@@ -15,6 +15,27 @@ import { SettingsDialog } from "./components/SettingsDialog";
 import { GearIcon, BoltIcon } from "./components/ui/icons";
 import { OVERVIEW_ID, FLEET_STORAGE_ID, GAUGES_ID } from "./constants";
 import type { Settings, SparkSnapshot } from "./api/types";
+import { isWorkerSpark } from "./api/sparkRole";
+
+/** Keep hidden worker ids in their original slots when the visible tabs are reordered. */
+function mergeTabOrderKeepingHidden(
+  allSparks: SparkSnapshot[],
+  visibleOrder: string[],
+  hiddenIds: Set<string>
+): string[] {
+  if (hiddenIds.size === 0) return visibleOrder;
+  const result: string[] = [];
+  let vi = 0;
+  for (const spark of allSparks) {
+    if (hiddenIds.has(spark.id)) {
+      result.push(spark.id);
+    } else if (vi < visibleOrder.length) {
+      result.push(visibleOrder[vi++]);
+    }
+  }
+  while (vi < visibleOrder.length) result.push(visibleOrder[vi++]);
+  return result;
+}
 
 function placeholderSnapshot(
   id: string,
@@ -143,6 +164,19 @@ function DashboardApp() {
   const isOverview = activeId === OVERVIEW_ID;
   const isFleetStorage = activeId === FLEET_STORAGE_ID;
   const isGauges = activeId === GAUGES_ID;
+  const hideWorkers = settings?.hideWorkers ?? false;
+  const hiddenWorkerIds = useMemo(() => {
+    if (!hideWorkers) return new Set<string>();
+    return new Set(
+      displaySparks
+        .filter((s) => isWorkerSpark(s) && s.id !== activeId)
+        .map((s) => s.id)
+    );
+  }, [displaySparks, hideWorkers, activeId]);
+  const tabSparks = useMemo(
+    () => (hideWorkers ? displaySparks.filter((s) => !hiddenWorkerIds.has(s.id)) : displaySparks),
+    [displaySparks, hideWorkers, hiddenWorkerIds]
+  );
   const displayActive = isOverview || isGauges
     ? null
     : displaySparks.find((s) => s.id === activeId) || displaySparks[0] || activeSpark || null;
@@ -225,15 +259,19 @@ function DashboardApp() {
     }
   }, [sparks, activeId, setActiveId]);
 
-  const handleReorder = useCallback(async (orderedIds: string[]) => {
-    setOrderOverride(orderedIds);
-    try {
-      await reorderSparks(orderedIds);
-    } catch (err) {
-      console.error("Failed to reorder Sparks:", err);
-      setOrderOverride(null);
-    }
-  }, []);
+  const handleReorder = useCallback(
+    async (orderedIds: string[]) => {
+      const next = mergeTabOrderKeepingHidden(displaySparks, orderedIds, hiddenWorkerIds);
+      setOrderOverride(next);
+      try {
+        await reorderSparks(next);
+      } catch (err) {
+        console.error("Failed to reorder Sparks:", err);
+        setOrderOverride(null);
+      }
+    },
+    [displaySparks, hiddenWorkerIds]
+  );
 
   return (
     <div className="min-h-screen p-0 text-text sm:p-8">
@@ -250,7 +288,7 @@ function DashboardApp() {
             </span>
           </button>
           <SparkTabs
-            sparks={displaySparks}
+            sparks={tabSparks}
             activeId={displayActive?.id ?? activeId}
             onSelect={navigate}
             onAdd={() => setShowAdd(true)}
@@ -278,6 +316,7 @@ function DashboardApp() {
               variant={isGauges ? "gauges" : "overview"}
               sparks={displaySparks}
               hideOffline={settings?.autoHideOffline ?? false}
+              hideWorkers={hideWorkers}
               temperatureUnit={settings?.temperatureUnit ?? "celsius"}
               onSelectSpark={navigate}
             />
