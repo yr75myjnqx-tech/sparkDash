@@ -110,6 +110,8 @@ export class LlmProbe {
     this.prefixCacheHitRate = null;
     /** End-to-end request latency p95 (seconds). */
     this.e2eP95Seconds = null;
+    /** Mean decode (generation) time per completed request (seconds). */
+    this.avgDecodeSeconds = null;
     /** Inter-token latency p95 (seconds). */
     this.itlP95Seconds = null;
     /** Speculative/MTP acceptance rate 0–1 (accepted/drafted). */
@@ -245,6 +247,7 @@ export class LlmProbe {
     this.preemptionsTotal = null;
     this.prefixCacheHitRate = null;
     this.e2eP95Seconds = null;
+    this.avgDecodeSeconds = null;
     this.itlP95Seconds = null;
     this.mtpAcceptanceRate = null;
     this.slotState.clear();
@@ -610,6 +613,7 @@ export class LlmProbe {
     this.ttftP95Seconds = null;
     this.preemptionsTotal = null;
     this.e2eP95Seconds = null;
+    this.avgDecodeSeconds = null;
     this.itlP95Seconds = null;
   }
 
@@ -635,6 +639,7 @@ export class LlmProbe {
     this.preemptionsTotal = null;
     this.prefixCacheHitRate = null;
     this.e2eP95Seconds = null;
+    this.avgDecodeSeconds = null;
     this.itlP95Seconds = null;
     this.mtpAcceptanceRate = null;
     this.cachedPrefillTps = null;
@@ -729,6 +734,15 @@ export class LlmProbe {
     const e2eHist = this._parseVllmHistogram(txt, "vllm:e2e_request_latency_seconds");
     const e2eP95 = this._histogramQuantile(e2eHist.buckets, e2eHist.total, 0.95);
     this.e2eP95Seconds = e2eP95 == null ? null : Math.round(e2eP95 * 1000) / 1000;
+
+    // Mean decode time per completed request — used by the serving lanes
+    // widget to estimate queue wait (queue_depth × avg decode).
+    const decodeHist = this._parseVllmHistogram(txt, "vllm:request_decode_time_seconds");
+    const decodeSum = this._getVllmMetric(txt, "request_decode_time_seconds_sum");
+    this.avgDecodeSeconds =
+      decodeSum != null && decodeHist.total != null && decodeHist.total > 0
+        ? Math.round((decodeSum / decodeHist.total) * 1000) / 1000
+        : null;
 
     const itlHist = this._parseVllmHistogram(txt, "vllm:inter_token_latency_seconds");
     const itlP95 = this._histogramQuantile(itlHist.buckets, itlHist.total, 0.95);
@@ -1377,6 +1391,7 @@ export class LlmProbe {
       preemptionsTotal: this.preemptionsTotal,
       prefixCacheHitRate: this.prefixCacheHitRate,
       e2eP95Seconds: this.e2eP95Seconds,
+      avgDecodeSeconds: this.avgDecodeSeconds,
       itlP95Seconds: this.itlP95Seconds,
       mtpAcceptanceRate: this.mtpAcceptanceRate,
       posture: this._buildPosture(),
@@ -1406,6 +1421,7 @@ export class LlmProbe {
       preemptionsTotal: null,
       prefixCacheHitRate: null,
       e2eP95Seconds: null,
+      avgDecodeSeconds: null,
       itlP95Seconds: null,
       mtpAcceptanceRate: null,
       posture: this._buildPosture(),

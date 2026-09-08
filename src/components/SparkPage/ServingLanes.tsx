@@ -145,6 +145,28 @@ export function ServingLanes({ llm, maxNumSeqs }: ServingLanesProps) {
         </span>
       </div>
 
+      {/* Est. wait: queue_depth × mean decode time of completed requests
+          (vLLM exposes no per-request live waits without a gateway). */}
+      {(() => {
+        const estWaitSec =
+          waiting > 0 && llm.avgDecodeSeconds != null
+            ? waiting * llm.avgDecodeSeconds
+            : null;
+        if (estWaitSec == null) return null;
+        const estWait =
+          estWaitSec < 10
+            ? `${estWaitSec.toFixed(1)}s`
+            : `${Math.round(estWaitSec)}s`;
+        return (
+          <div className="flex items-center justify-between rounded-md border border-warning/20 bg-warning/5 px-2 py-1.5">
+            <span className="text-[10px] uppercase tracking-wide text-muted">
+              Est. Wait
+            </span>
+            <span className="font-tabular text-xs text-warning">~{estWait}</span>
+          </div>
+        );
+      })()}
+
       {/* Bottom stat row */}
       <div className="grid grid-cols-3 gap-2">
         <div className="space-y-0.5">
