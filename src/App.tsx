@@ -13,6 +13,8 @@ import { ShowcasePage } from "./components/ShowcasePage/ShowcasePage";
 import { ThemeSwitch } from "./components/ThemeSwitch";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { GearIcon, BoltIcon } from "./components/ui/icons";
+import { ConnectionBanner } from "./components/ui/ConnectionBanner";
+import { ErrorBanner } from "./components/ui/ErrorBanner";
 import { OVERVIEW_ID, FLEET_STORAGE_ID, GAUGES_ID } from "./constants";
 import type { Settings, SparkSnapshot } from "./api/types";
 import { isWorkerSpark } from "./api/sparkRole";
@@ -126,14 +128,35 @@ function placeholderSnapshot(
 }
 
 function DashboardApp() {
-  const { sparks, activeId, setActiveId, activeSpark, connected } = useSnapshot();
+  const {
+    sparks,
+    activeId,
+    setActiveId,
+    activeSpark,
+    connected,
+    lastValidSnapshotAt,
+    snapshotError,
+    refreshInterval,
+  } = useSnapshot();
+  const [telemetryNow, setTelemetryNow] = useState(Date.now());
   const navigate = useRoute(setActiveId);
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   /** Used when WS is down so add/delete still updates the tab bar */
   const [fallbackSparks, setFallbackSparks] = useState<SparkSnapshot[]>([]);
+  const staleAfterMs = Math.max(10_000, 3 * (refreshInterval ?? 2_000));
+  const telemetryStale =
+    lastValidSnapshotAt != null && telemetryNow - lastValidSnapshotAt > staleAfterMs;
+
+  useEffect(() => {
+    if (lastValidSnapshotAt == null) return;
+    setTelemetryNow(Date.now());
+    const timer = window.setInterval(() => setTelemetryNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [lastValidSnapshotAt]);
 
   // Prefer live WS data; fall back to API-fetched list when empty
   const liveSparks = sparks.length > 0 ? sparks : fallbackSparks;
@@ -191,7 +214,11 @@ function DashboardApp() {
   useEffect(() => {
     fetchSettings()
       .then(setSettings)
-      .catch((err) => console.error("Failed to fetch settings:", err));
+      .catch((err) =>
+        setActionError(
+          `Could not load settings: ${err instanceof Error ? err.message : String(err)}. Reload to retry.`
+        )
+      );
   }, []);
 
   const handleSettingsSaved = useCallback((s: Settings) => {
@@ -271,6 +298,9 @@ function DashboardApp() {
       if (configs.length === 0 && activeId !== OVERVIEW_ID && activeId !== GAUGES_ID) setActiveId(null);
     } catch (err) {
       console.error("Failed to refresh sparks:", err);
+      setActionError(
+        `Could not refresh Sparks: ${err instanceof Error ? err.message : String(err)}. Previous data remains visible.`
+      );
     }
   }, [sparks, activeId, setActiveId]);
 
@@ -283,6 +313,9 @@ function DashboardApp() {
       } catch (err) {
         console.error("Failed to reorder Sparks:", err);
         setOrderOverride(null);
+        setActionError(
+          `Could not save the Spark order: ${err instanceof Error ? err.message : String(err)}. The previous order was restored.`
+        );
       }
     },
     [displaySparks, hiddenWorkerIds]
@@ -323,7 +356,15 @@ function DashboardApp() {
             <ThemeSwitch />
           </div>
         </header>
-        <main>
+        <ConnectionBanner
+          connected={connected}
+          lastValidSnapshotAt={lastValidSnapshotAt}
+          snapshotError={snapshotError}
+          now={telemetryNow}
+          stale={telemetryStale}
+        />
+        <ErrorBanner message={actionError} onDismiss={() => setActionError(null)} />
+        <main className={telemetryStale || !connected ? "telemetry-stale" : undefined}>
           {isFleetStorage ? (
             <FleetStoragePage sparks={displaySparks} />
           ) : isOverview || isGauges ? (
@@ -332,6 +373,9 @@ function DashboardApp() {
               sparks={displaySparks}
               hideOffline={settings?.autoHideOffline ?? false}
               hideWorkers={hideWorkers}
+              showFleetEnergy={settings?.showFleetEnergy ?? false}
+              showFleetExceptions={settings?.showFleetExceptions ?? false}
+              showOverviewSearch={settings?.showOverviewSearch ?? false}
               temperatureUnit={settings?.temperatureUnit ?? "celsius"}
               onSelectSpark={navigate}
               gaugeScales={settings?.gaugeScales ?? {}}

@@ -66,7 +66,7 @@ export class LlmProbe {
     this.baseUrl = `http://${llmProbeHost(spark)}:${port}`;
 
     // State
-    this.backendType = null; // 'vllm' | 'llama.cpp' | 'sglang' | 'ds4' | 'exl3' | null
+    this.backendType = null; // 'vllm' | 'llama.cpp' | 'sglang' | 'ds4' | 'exl3' | 'q27' | null
     this.serverIsOpenAI = null; // true = OpenAI-compatible
     /** Whether /v1/models (or /slots) answered without credentials. null = unknown. */
     this.authOpen = null;
@@ -92,6 +92,8 @@ export class LlmProbe {
     this.lastPrefillKinds = null;
     /** Previous vLLM TTFT histogram `_sum` (seconds). null until first sample. */
     this.lastTtftSum = null;
+    /** Previous vLLM TTFT histogram `_count` (requests). null until first sample. */
+    this.lastTtftCount = null;
     /** Previous `vllm:iteration_tokens_total_sum` (engine-step tokens). */
     this.lastIterSum = null;
     this.lastProbeTime = 0;
@@ -105,6 +107,8 @@ export class LlmProbe {
     this.requestsRunning = null;
     this.requestsWaiting = null;
     this.ttftP95Seconds = null;
+    /** Live recent-window mean TTFT (seconds) from histogram sum/count deltas. null when unavailable. */
+    this.ttftSeconds = null;
     this.preemptionsTotal = null; // cumulative counter
     /** Prefix cache hit rate 0–1 (hits/queries). */
     this.prefixCacheHitRate = null;
@@ -244,6 +248,7 @@ export class LlmProbe {
     this.requestsRunning = null;
     this.requestsWaiting = null;
     this.ttftP95Seconds = null;
+    this.ttftSeconds = null;
     this.preemptionsTotal = null;
     this.prefixCacheHitRate = null;
     this.e2eP95Seconds = null;
@@ -254,6 +259,7 @@ export class LlmProbe {
     this.lastTokenCounts = { input: 0, output: 0 };
     this.lastPrefillKinds = null;
     this.lastTtftSum = null;
+    this.lastTtftCount = null;
     this.lastIterSum = null;
     this._sglangStickyTps = null;
   }
@@ -282,7 +288,8 @@ export class LlmProbe {
       this.backendType !== "vllm" &&
       this.backendType !== "sglang" &&
       this.backendType !== "ds4" &&
-      this.backendType !== "exl3"
+      this.backendType !== "exl3" &&
+      this.backendType !== "q27"
     ) {
       const slotUrl = `${this.baseUrl}/slots`;
       try {
@@ -329,19 +336,22 @@ export class LlmProbe {
   }
 
   /**
-   * Classify an OpenAI-compatible server: ds4, SGLang, EXL3, or vLLM (default).
+   * Classify an OpenAI-compatible server: ds4, SGLang, EXL3, q27, or vLLM (default).
    * @param {unknown} ownedBy
-   * @returns {Promise<"ds4" | "sglang" | "exl3" | "vllm">}
+   * @returns {Promise<"ds4" | "sglang" | "exl3" | "q27" | "vllm">}
    */
   async _classifyOpenAIBackend(ownedBy) {
     if (typeof ownedBy === "string") {
       if (/ds4/i.test(ownedBy)) return "ds4";
       if (/sglang/i.test(ownedBy)) return "sglang";
       if (/exl3/i.test(ownedBy)) return "exl3";
+      // q27's /v1/models reports owned_by: "q27" (signalnine/q27 engine).
+      if (/q27/i.test(ownedBy)) return "q27";
     }
     if (await this._probeIsDs4()) return "ds4";
     if (await this._probeIsSglang()) return "sglang";
     if (await this._probeIsExl3()) return "exl3";
+    if (await this._probeIsQ27()) return "q27";
     return "vllm";
   }
 
@@ -407,6 +417,25 @@ export class LlmProbe {
   /** @param {string} body */
   static _metricsLookLikeDs4(body) {
     return /(?:^|\n)ds4_tokens_decoded_total(?:\{|\s)/m.test(String(body || ""));
+  }
+
+  /** True when Prometheus /metrics exposes q27-series (signalnine/q27 engine). */
+  async _probeIsQ27() {
+    try {
+      const res = await this._fetch(`${this.baseUrl}/metrics`);
+      if (!res.ok) return false;
+      const txt = await res.text();
+      return LlmProbe._metricsLookLikeQ27(txt);
+    } catch {
+      return false;
+    }
+  }
+
+  /** @param {string} body */
+  static _metricsLookLikeQ27(body) {
+    return /(?:^|\n)q27_(?:decode_tokens_(?:processed_)?total|requests_total)(?:\{|\s)/m.test(
+      String(body || "")
+    );
   }
 
   // ─── OpenAI-compatible path (vLLM/sglang/ds4) ────────────
@@ -515,15 +544,31 @@ export class LlmProbe {
         ) {
           this.backendType = "ds4";
           this._applyDs4Metrics(txt, dtSec);
+        } else if (
+          this.backendType === "q27" ||
+          LlmProbe._metricsLookLikeQ27(txt)
+        ) {
+          this.backendType = "q27";
+          this._applyQ27Metrics(txt, dtSec);
         } else {
           this.backendType = "vllm";
           this._applyVllmMetrics(txt, dtSec);
         }
-      } else if (this.backendType !== "ds4" && this.backendType !== "exl3") {
+      } else if (
+        this.backendType !== "ds4" &&
+        this.backendType !== "exl3" &&
+        this.backendType !== "q27"
+      ) {
         this.backendType = "vllm";
       }
     } catch {
-      if (this.backendType !== "ds4" && this.backendType !== "exl3") this.backendType = "vllm";
+      if (
+        this.backendType !== "ds4" &&
+        this.backendType !== "exl3" &&
+        this.backendType !== "q27"
+      ) {
+        this.backendType = "vllm";
+      }
     }
 
     return this._getSnapshot();
@@ -611,10 +656,113 @@ export class LlmProbe {
     this.kvCacheUsage = null;
     this.requestsWaiting = null;
     this.ttftP95Seconds = null;
+    this.ttftSeconds = null;
     this.preemptionsTotal = null;
     this.e2eP95Seconds = null;
     this.avgDecodeSeconds = null;
     this.itlP95Seconds = null;
+  }
+
+  /**
+   * Apply q27 (signalnine/q27 engine) Prometheus /metrics.
+   *
+   * The engine exposes the [req]-universe telemetry that was previously only
+   * in stderr logs, under q27_* series with an api= label (chat / completions /
+   * messages / responses). The probe sums across label sets, exactly like the
+   * ds4/vLLM paths: live tok/s from counter deltas so idle → 0.
+   *
+   * Semantics vs the vLLM path: prefill accounting is EXACT (per-request
+   * token counts, not vLLM's estimates) and the prefix split (computed/cached)
+   * doubles as the prefix-cache hit rate; the main prefill tile follows the
+   * ds4 convention and counts COMPUTED tokens only. The waiting tile stays
+   * null → the panel shows "—" (q27 FIFO-queues, no scheduler wait), while
+   * preemptions are exposed as a constant-0 counter so Preempts reads 0.
+   * @param {string} txt
+   * @param {number} dtSec
+   */
+  _applyQ27Metrics(txt, dtSec) {
+    // Live processed counters first (move during generation -> real-time
+    // tok/s); fall back to the completion-based per-api totals for older
+    // q27 binaries (step function: 0 during generation, jump at completion).
+    const decoded =
+      this._getPromMetric(txt, "q27_decode_tokens_processed_total") ??
+      this._getPromMetric(txt, "q27_decode_tokens_total");
+    // Exact prefill (not estimated like vLLM). Follow the ds4 convention:
+    // the main prefill tile counts COMPUTED tokens only -- cache-served
+    // tokens go to the cached/uncached split below, so a cache hit does not
+    // inflate the "real work" rate.
+    const computed =
+      this._getPromMetric(txt, "q27_prefill_computed_tokens_processed_total") ??
+      this._getPromMetric(txt, "q27_prefill_computed_tokens_total");
+    if (decoded != null) {
+      if (dtSec > 0 && dtSec < 10) {
+        const deltaOut = decoded - this.lastTokenCounts.output;
+        this.generationTps = Math.max(0, Math.round((deltaOut / dtSec) * 100) / 100);
+        if (computed != null) {
+          const deltaIn = computed - this.lastTokenCounts.input;
+          this.prefillTps = Math.max(0, Math.round((deltaIn / dtSec) * 100) / 100);
+        }
+      }
+      if (computed != null) this.lastTokenCounts.input = computed;
+      this.lastTokenCounts.output = decoded;
+      this.totalOutputTokens = decoded;
+    }
+
+    const inflight = this._getPromMetric(txt, "q27_requests_inflight");
+    this.requestsRunning = inflight;
+    if (inflight != null) this.slotsActive = Math.round(inflight);
+
+    const slotsTotal = this._getPromMetric(txt, "q27_slots_total");
+    if (slotsTotal != null) this.slotsTotal = Math.round(slotsTotal);
+
+    this.kvCacheUsage = this._getPromMetric(txt, "q27_kv_usage_perc");
+    this.requestsWaiting = null; // not exposed: q27 FIFO-queues, no wait gauge
+    // q27 never preempts (FIFO admission) — the server exposes a constant-0
+    // counter, so the Preempts tile reads 0 instead of "—".
+    this.preemptionsTotal = this._getPromMetric(txt, "q27_preemptions_total");
+    // Engine state: q27 keeps weights resident and is ready whenever the
+    // server is up (no sleep state / memory release), so report Active like
+    // the SGLang path does.
+    if (this.gpuMemoryUtilization == null) this.gpuMemoryUtilization = 1;
+
+    // Histograms (cumulative buckets, +Inf == _count by construction).
+    const ttftHist = this._parseHistogram(
+      txt,
+      "q27_ttft_seconds",
+      "q27_ttft_seconds_count"
+    );
+    const ttftP95 = this._histogramQuantile(ttftHist.buckets, ttftHist.total, 0.95);
+    this.ttftP95Seconds = ttftP95 == null ? null : Math.round(ttftP95 * 1000) / 1000;
+
+    const e2eHist = this._parseHistogram(
+      txt,
+      "q27_e2e_seconds",
+      "q27_e2e_seconds_count"
+    );
+    const e2eP95 = this._histogramQuantile(e2eHist.buckets, e2eHist.total, 0.95);
+    this.e2eP95Seconds = e2eP95 == null ? null : Math.round(e2eP95 * 1000) / 1000;
+
+    const itlHist = this._parseHistogram(
+      txt,
+      "q27_itl_seconds",
+      "q27_itl_seconds_count"
+    );
+    const itlP95 = this._histogramQuantile(itlHist.buckets, itlHist.total, 0.95);
+    this.itlP95Seconds = itlP95 == null ? null : Math.round(itlP95 * 1000) / 1000;
+
+    // Prefix-cache hit rate + live cached/uncached prefill split (live
+    // processed counters, with completion-based fallback).
+    const cachedSplit =
+      this._getPromMetric(txt, "q27_prefill_cached_tokens_processed_total") ??
+      this._getPromMetric(txt, "q27_prefill_cached_tokens_total");
+    const computedSplit =
+      this._getPromMetric(txt, "q27_prefill_computed_tokens_processed_total") ??
+      this._getPromMetric(txt, "q27_prefill_computed_tokens_total");
+    this._setPrefillSplitRates(cachedSplit, computedSplit, dtSec);
+
+    const specAccept = this._getPromMetric(txt, "q27_spec_accept_ratio");
+    this.mtpAcceptanceRate =
+      specAccept != null ? Math.round(specAccept * 10000) / 10000 : null;
   }
 
   /**
@@ -636,6 +784,7 @@ export class LlmProbe {
     this.kvCacheUsage = null;
     this.requestsWaiting = null;
     this.ttftP95Seconds = null;
+    this.ttftSeconds = null;
     this.preemptionsTotal = null;
     this.prefixCacheHitRate = null;
     this.e2eP95Seconds = null;
@@ -710,6 +859,22 @@ export class LlmProbe {
           0,
           Math.round((livePrefill > 0 ? livePrefill : finishedPrefill) * 100) / 100
         );
+      }
+      // Live mean TTFT over the last poll window from histogram sum/count deltas.
+      // Computed BEFORE lastTtftSum is advanced so the delta is real, not 0.
+      const ttftCount = this._getVllmMetric(txt, "time_to_first_token_seconds_count");
+      if (ttftCount != null) {
+        const deltaSum =
+          ttftSum != null && this.lastTtftSum != null ? ttftSum - this.lastTtftSum : null;
+        const deltaCount =
+          this.lastTtftCount != null ? ttftCount - this.lastTtftCount : null;
+        this.ttftSeconds =
+          deltaSum != null && deltaCount != null && deltaCount > 0 && deltaSum >= 0
+            ? Math.round((deltaSum / deltaCount) * 1000) / 1000
+            : null;
+        this.lastTtftCount = ttftCount;
+      } else {
+        this.ttftSeconds = null;
       }
       if (ttftSum != null) this.lastTtftSum = ttftSum;
     }
@@ -1226,11 +1391,12 @@ export class LlmProbe {
   }
 
   /**
-   * Parse a vLLM Prometheus histogram from /metrics text.
-   * Returns { buckets: [{upper, count}], total } with cumulative counts per `le`,
-   * summed across label sets. `total` is the summed `_count` series (or null).
+   * Parse a Prometheus histogram from /metrics text.
+   * Returns { buckets: [{upper, count}], total } with cumulative counts per
+   * `le`, summed across label sets. `total` is the summed `_count` series
+   * (or null). `countMetricName` is the full metric name (with prefix).
    */
-  _parseVllmHistogram(body, metricPrefix) {
+  _parseHistogram(body, metricPrefix, countMetricName) {
     const esc = metricPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     // Bucket lines: <metricPrefix>_bucket{...le="X"...} VALUE
     const bucketRe = new RegExp(
@@ -1249,7 +1415,7 @@ export class LlmProbe {
       if (upper === Infinity) infCount += count;
       byUpper.set(upper, (byUpper.get(upper) || 0) + count);
     }
-    const total = this._getVllmMetric(body, `${metricPrefix.replace(/^vllm:/, "")}_count`);
+    const total = this._getPromMetric(body, countMetricName);
     // Prometheus invariant: +Inf bucket count == _count. Mismatch → refuse quantile.
     if (total != null && infCount > 0 && Math.abs(infCount - total) > 1e-6) {
       return { buckets: [], total: null };
@@ -1257,6 +1423,14 @@ export class LlmProbe {
     const buckets = Array.from(byUpper, ([upper, count]) => ({ upper, count }));
     buckets.sort((a, b) => a.upper - b.upper);
     return { buckets, total };
+  }
+
+  /**
+   * Parse a vLLM Prometheus histogram from /metrics text (vllm: prefix).
+   */
+  _parseVllmHistogram(body, metricPrefix) {
+    const name = metricPrefix.replace(/^vllm:/, "");
+    return this._parseHistogram(body, metricPrefix, `vllm:${name}_count`);
   }
 
   /**
@@ -1388,6 +1562,7 @@ export class LlmProbe {
       requestsRunning: this.requestsRunning,
       requestsWaiting: this.requestsWaiting,
       ttftP95Seconds: this.ttftP95Seconds,
+      ttftSeconds: this.ttftSeconds,
       preemptionsTotal: this.preemptionsTotal,
       prefixCacheHitRate: this.prefixCacheHitRate,
       e2eP95Seconds: this.e2eP95Seconds,
@@ -1418,6 +1593,7 @@ export class LlmProbe {
       requestsRunning: null,
       requestsWaiting: null,
       ttftP95Seconds: null,
+      ttftSeconds: null,
       preemptionsTotal: null,
       prefixCacheHitRate: null,
       e2eP95Seconds: null,

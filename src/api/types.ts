@@ -316,7 +316,7 @@ export interface UnifiedMemoryMetrics {
 // ─── LLM metrics ─────────────────────────────────────────
 export interface LlmMetrics {
   available: boolean;
-  backend: "vllm" | "llama.cpp" | "sglang" | "ds4" | "exl3" | null;
+  backend: "vllm" | "llama.cpp" | "sglang" | "ds4" | "exl3" | "q27" | null;
   modelId: string | null;
   modelPath: string | null;
   contextLength: number | null;
@@ -340,6 +340,8 @@ export interface LlmMetrics {
   requestsWaiting?: number | null;
   /** vLLM time-to-first-token p95 in seconds. null when unavailable. */
   ttftP95Seconds?: number | null;
+  /** Live recent-window mean TTFT (seconds) from vLLM histogram sum/count deltas. null when unavailable. */
+  ttftSeconds?: number | null;
   /** vLLM cumulative preemption count. null when unavailable. */
   preemptionsTotal?: number | null;
   /** vLLM prefix-cache hit rate (hits/queries, 0–1). null when unavailable. */
@@ -523,6 +525,12 @@ export interface SparkSnapshot {
   workerNode?: boolean;
   /** Optional cluster/model label when role is worker */
   workerLabel?: string | null;
+  /**
+   * Derived worker label: live mirror of the head's served model id.
+   * Display-only (never written to config). A non-empty manual workerLabel
+   * takes priority over this in the UI.
+   */
+  workerDerivedLabel?: string | null;
   /** Optional head Spark id when role is worker */
   workerHeadId?: string | null;
   /** Standalone: whether LLM is probed (head always true, worker always false) */
@@ -553,8 +561,29 @@ export interface SparkSnapshot {
 // ─── WebSocket envelope ───────────────────────────────────
 export interface WsSnapshot {
   type: "snapshot";
+  /** Server generation time; optional while clients and servers roll independently. */
+  generatedAt?: number;
   sparks: SparkSnapshot[];
   refreshInterval: number;
+}
+
+export interface FleetEnergy {
+  estimated: boolean;
+  membershipChanged: boolean;
+  restartRequired: boolean;
+  trackedNodeIds: string[];
+  currentNodeIds: string[];
+  freshNodeCount: number;
+  currentWatts30s: number | null;
+  energy24hKwh: number | null;
+  energy31dKwh: number | null;
+  whPerOutputToken24h: number | null;
+  outputTokens24h: number;
+  coverage24hMs: number;
+  coverage31dMs: number;
+  nodeCoverage24hMs: Record<string, number>;
+  nodeCoverage31dMs: Record<string, number>;
+  hourlyWatts24h: Array<number | null>;
 }
 
 // ─── API responses ────────────────────────────────────────
@@ -571,6 +600,12 @@ export interface Settings {
   density: "comfortable" | "compact";
   /** Per-Spark fixed gauge scale maxima (tok/s) for the Gauges tab dials. */
   gaugeScales: Record<string, { gen?: number | null; prefill?: number | null }>;
+  /** Overview Fleet Energy card. Off by default. */
+  showFleetEnergy: boolean;
+  /** Overview active fleet exceptions strip. Off by default. */
+  showFleetExceptions: boolean;
+  /** Overview search field + status filter. Off by default. */
+  showOverviewSearch: boolean;
 }
 
 export interface SparksListResponse {
@@ -579,8 +614,16 @@ export interface SparksListResponse {
 
 export interface SparkTestResponse {
   id: string;
+  capabilities: Array<{
+    id: "host" | "llm" | "comfy" | "hermes" | "tailnet";
+    label: string;
+    status: "pass" | "fail" | "skipped";
+    required: boolean;
+    message: string;
+    recovery: string | null;
+  }>;
   ssh: { ok: boolean; message: string };
-  llm: { ok: boolean; message: string };
+  llm: { ok: boolean; message: string; skipped?: boolean };
   comfy?: { ok: boolean; message: string; skipped?: boolean };
   ok: boolean;
 }
