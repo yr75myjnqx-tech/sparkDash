@@ -13,7 +13,7 @@ import { BenchmarkDialog } from "./BenchmarkDialog";
 import { PrefillBenchDialog } from "./PrefillBenchDialog";
 import { LlmDailyChart } from "./LlmDailyChart";
 import { parseLlmTargetInput } from "../../shared/llmTarget.js";
-import { scaleForModel } from "../../config/display.js";
+import { scaleForModel, fmtSeconds, DISPLAY } from "../../config/display.js";
 import { LlmTrendChart } from "./LlmTrendChart";
 
 interface LlmPanelProps {
@@ -903,15 +903,16 @@ export function LlmPanel({
                 </div>
               </div>
               <div className="space-y-0.5">
+                {/* Aggregate windows are always labelled (§5.5, AT-7). */}
                 <MetricInfoTip
                   id="ttftP95"
-                  label="TTFT p95"
+                  label={`TTFT p95 · ${DISPLAY.AGG_WINDOW_S / 60}m`}
                   text={VLLM_METRIC_INFO.ttftP95}
                   openId={metricInfoId}
                   setOpenId={setMetricInfoId}
                 />
                 <div className="font-tabular text-sm text-text">
-                  {llm.ttftP95Seconds != null ? `${llm.ttftP95Seconds.toFixed(3)}s` : "—"}
+                  {llm.ttftP95Seconds != null ? fmtSeconds(llm.ttftP95Seconds) : "—"}
                 </div>
               </div>
               <div className="space-y-0.5">
@@ -951,26 +952,26 @@ export function LlmPanel({
               <div className="space-y-0.5">
                 <MetricInfoTip
                   id="e2eP95"
-                  label="E2E p95"
+                  label={`E2E p95 · ${DISPLAY.AGG_WINDOW_S / 60}m`}
                   text={VLLM_METRIC_INFO.e2eP95}
                   openId={metricInfoId}
                   setOpenId={setMetricInfoId}
                   align="right"
                 />
                 <div className="font-tabular text-sm text-text">
-                  {llm.e2eP95Seconds != null ? `${llm.e2eP95Seconds.toFixed(3)}s` : "—"}
+                  {llm.e2eP95Seconds != null ? fmtSeconds(llm.e2eP95Seconds) : "—"}
                 </div>
               </div>
               <div className="space-y-0.5">
                 <MetricInfoTip
                   id="itlP95"
-                  label="ITL p95"
+                  label={`ITL p95 · ${DISPLAY.AGG_WINDOW_S / 60}m`}
                   text={VLLM_METRIC_INFO.itlP95}
                   openId={metricInfoId}
                   setOpenId={setMetricInfoId}
                 />
                 <div className="font-tabular text-sm text-text">
-                  {llm.itlP95Seconds != null ? `${llm.itlP95Seconds.toFixed(3)}s` : "—"}
+                  {llm.itlP95Seconds != null ? fmtSeconds(llm.itlP95Seconds) : "—"}
                 </div>
               </div>
               <div className="space-y-0.5">

@@ -1,4 +1,5 @@
 import type { LlmMetrics } from "../../api/types";
+import { DISPLAY } from "../../config/display.js";
 
 /**
  * Compact "serving lanes" widget for vLLM backends: one lane box per
@@ -178,8 +179,10 @@ export function ServingLanes({ llm, maxNumSeqs }: ServingLanesProps) {
       {/* Bottom stat row */}
       <div className="grid grid-cols-3 gap-2">
         <div className="space-y-0.5">
+          {/* Aggregates always carry their window (§5.5, AT-7); an empty
+              window renders "—", never a stale number. */}
           <div className="text-[10px] uppercase tracking-wide text-muted">
-            TTFT p95
+            TTFT p95 · {DISPLAY.AGG_WINDOW_S / 60}m
           </div>
           <div className="font-tabular text-xs text-text">{ttft}</div>
         </div>

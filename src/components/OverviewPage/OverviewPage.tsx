@@ -6,7 +6,7 @@ import { ConfirmShutdownDialog } from "../ConfirmShutdownDialog";
 import { MetricBar } from "../ui/MetricBar";
 import { Sparkline } from "../ui/Sparkline";
 import { displayNodeName, describeTrend, scaleForModel, DISPLAY } from "../../config/display.js";
-import { useMetricsHistoryTail } from "../../hooks/metricsStore";
+import { useMetricsHistoryTail, useSparkLastSeen } from "../../hooks/metricsStore";
 import { SpeedGauge } from "../ui/SpeedGauge";
 import { ServingLanes } from "../SparkPage/ServingLanes";
 import { FleetEnergyCard } from "./FleetEnergyCard";
@@ -99,6 +99,20 @@ function SparkCard({
   const um = spark.metrics.unifiedMemory;
   const online = spark.online;
 
+  // Data freshness (§5.5 / I-5): `online` asserts host reachability only —
+  // metric currency is measured from the last WS frame that carried this
+  // spark. Ticks at 1 Hz so `updated Ns ago` counts visibly.
+  const lastSeen = useSparkLastSeen(spark.id);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const ageS =
+    lastSeen != null && online ? Math.max(0, Math.round((nowMs - lastSeen) / 1000)) : null;
+  const stale = ageS != null && ageS > DISPLAY.STALE_AFTER_S;
+  const dead = ageS != null && ageS > DISPLAY.DEAD_AFTER_S;
+
   // Trend histories for the fixed-domain sparklines (§5.1): 5-min window at
   // the 2 s telemetry cadence, same ring-buffer infrastructure as GpuPanel.
   const tempHistory = useMetricsHistoryTail(spark.id, "gpu.temp");
@@ -126,7 +140,7 @@ function SparkCard({
       style={{
         padding: "var(--density-card-pad)",
         gap: "var(--density-card-gap)",
-        ...(online ? {} : { opacity: 0.6 }),
+        ...(online && !stale ? {} : { opacity: 0.6 }),
       }}
     >
       {/* Card header */}
@@ -205,6 +219,22 @@ function SparkCard({
         <span className="text-[10px] uppercase tracking-wide text-muted">
           {online ? "online" : "offline"}
         </span>
+        {ageS != null &&
+          (stale ? (
+            <span
+              className="shrink-0 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning"
+              title="No telemetry received within the stale threshold — metrics may be old"
+            >
+              STALE · {ageS}s ago
+            </span>
+          ) : (
+            <span
+              className="text-[10px] uppercase tracking-wide text-muted"
+              title="Time since the last telemetry frame for this node"
+            >
+              updated {ageS}s ago
+            </span>
+          ))}
       </div>
 
       {!online || !gpu ? (
@@ -395,7 +425,33 @@ function SparkCard({
             if (role === "worker") return null;
             const llmArr = spark.metrics.llm;
             const llm = Array.isArray(llmArr) ? llmArr.find((l) => l.available) : null;
-            if (!llm) return null;
+            // Section skeleton / empty states (§5.4, I-4): the workload
+            // section never disappears. Zero tok/s renders as 0; *missing*
+            // telemetry renders an explicit placeholder. `dead` (> 60 s
+            // without a frame) forces the placeholder even though a stale
+            // snapshot is still cached.
+            if (!llm || dead) {
+              const placeholder = dead
+                ? "NO DATA — exporter not reporting"
+                : spark.llmMonitoring === false
+                  ? "NO WORKLOAD MONITORED"
+                  : vramPct > 0
+                    ? "VRAM allocated — no monitored workload"
+                    : "NO DATA — exporter not reporting";
+              const hint =
+                !dead && spark.llmMonitoring === false
+                  ? "LLM monitoring is disabled for this node."
+                  : "Zero tok/s would be a real reading; this placeholder means no telemetry arrived at all.";
+              return (
+                <div className="mt-3.5 border-t border-border pt-3">
+                  <p className="text-[11px] uppercase tracking-wide text-muted" title={hint}>
+                    {placeholder}
+                    <span aria-hidden="true" className="ml-1 cursor-help text-[10px]">?</span>
+                    <span className="sr-only"> {hint}</span>
+                  </p>
+                </div>
+              );
+            }
             if (tokDisplay === "gauges") {
               // Gauge scales are model-keyed (I-2′): identical for every node
               // serving the same model; unknown keys render at FALLBACK_SCALE
