@@ -21,8 +21,6 @@ const DEFAULTS = Object.freeze({
   benchDebugTraces: false,
   /** Layout density — compact (default) or comfortable. */
   density: "compact",
-  /** Per-Spark fixed gauge scale maxima: { [sparkId]: { gen, prefill } } in tok/s. */
-  gaugeScales: {},
   /** Overview Fleet Energy card. Off by default. */
   showFleetEnergy: false,
   /** Overview active fleet exceptions strip. Off by default. */
@@ -60,17 +58,16 @@ function _clampSettings(settings) {
   if (s.density !== "comfortable" && s.density !== "compact") {
     s.density = DEFAULTS.density;
   }
-  // Sanitize gaugeScales — per-Spark { gen, prefill } positive numbers or null
-  if (s.gaugeScales == null || typeof s.gaugeScales !== "object" || Array.isArray(s.gaugeScales)) {
-    s.gaugeScales = {};
-  } else {
-    const num = (x) => (typeof x === "number" && Number.isFinite(x) && x > 0 ? x : null);
-    const clean = {};
-    for (const [id, v] of Object.entries(s.gaugeScales)) {
-      if (!v || typeof v !== "object" || Array.isArray(v)) continue;
-      clean[id] = { gen: num(v.gen), prefill: num(v.prefill) };
-    }
-    s.gaugeScales = clean;
+  // gaugeScales retired (Addendum C.2): scales are model-keyed in
+  // src/config/display.js MODEL_SCALES. On a legacy settings file, drop the
+  // key once with the old values logged so deliberate numbers can be
+  // transcribed into MODEL_SCALES with a source: string.
+  if (Object.prototype.hasOwnProperty.call(s, "gaugeScales")) {
+    console.log(
+      "[settings] GAUGE_SCALES_RETIRED — dropping legacy per-Spark gaugeScales:",
+      JSON.stringify(s.gaugeScales)
+    );
+    delete s.gaugeScales;
   }
   return s;
 }

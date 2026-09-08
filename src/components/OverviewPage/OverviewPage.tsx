@@ -5,13 +5,13 @@ import { shutdownAllSparks, updateAllHermes, wakeAllSparks } from "../../api/cli
 import { ConfirmShutdownDialog } from "../ConfirmShutdownDialog";
 import { MetricBar } from "../ui/MetricBar";
 import { Sparkline } from "../ui/Sparkline";
-import { displayNodeName, describeTrend, DISPLAY } from "../../config/display.js";
+import { displayNodeName, describeTrend, scaleForModel, DISPLAY } from "../../config/display.js";
 import { useMetricsHistoryTail } from "../../hooks/metricsStore";
 import { SpeedGauge } from "../ui/SpeedGauge";
 import { ServingLanes } from "../SparkPage/ServingLanes";
 import { FleetEnergyCard } from "./FleetEnergyCard";
 import { FleetAlertStrip } from "./FleetAlertStrip";
-import { ActivityIcon, GearIcon, PowerOffIcon, PowerOnIcon, RotateIcon } from "../ui/icons";
+import { ActivityIcon, PowerOffIcon, PowerOnIcon, RotateIcon } from "../ui/icons";
 
 interface OverviewPageProps {
   sparks: SparkSnapshot[];
@@ -24,10 +24,6 @@ interface OverviewPageProps {
   onSelectSpark?: (id: string) => void;
   /** "gauges" renders the same cards with tok/s speedometers (Gauges tab). */
   variant?: "overview" | "gauges";
-  /** Per-Spark fixed gauge scale maxima (from server settings). */
-  gaugeScales?: Record<string, { gen?: number | null; prefill?: number | null }>;
-  /** Persist a Spark's gauge scale maxima to server settings. */
-  onGaugeScalesChange?: (sparkId: string, scales: { gen: number | null; prefill: number | null }) => void;
 }
 
 function celsiusToFahrenheit(c: number): number {
@@ -91,8 +87,6 @@ function SparkCard({
   temperatureUnit,
   onSelect,
   tokDisplay = "stats",
-  gaugeScales = null,
-  onGaugeScalesChange,
 }: {
   spark: SparkSnapshot;
   headSparkName?: string | null;
@@ -100,9 +94,6 @@ function SparkCard({
   onSelect?: (id: string) => void;
   /** "gauges" swaps the tok/s numbers for prefill/gen speedometer dials. */
   tokDisplay?: "stats" | "gauges";
-  /** This Spark's fixed gauge scale maxima (tok/s); null = adaptive per dial. */
-  gaugeScales?: { gen?: number | null; prefill?: number | null } | null;
-  onGaugeScalesChange?: (scales: { gen: number | null; prefill: number | null }) => void;
 }) {
   const gpu = spark.metrics.gpu;
   const um = spark.metrics.unifiedMemory;
@@ -406,6 +397,10 @@ function SparkCard({
             const llm = Array.isArray(llmArr) ? llmArr.find((l) => l.available) : null;
             if (!llm) return null;
             if (tokDisplay === "gauges") {
+              // Gauge scales are model-keyed (I-2′): identical for every node
+              // serving the same model; unknown keys render at FALLBACK_SCALE
+              // with the DEFAULT SCALE badge.
+              const modelScale = scaleForModel(llm.modelId);
               const backendLabel =
                 llm.backend === "vllm"
                   ? "vLLM"
@@ -420,22 +415,27 @@ function SparkCard({
                           : (llm.backend ?? "LLM");
               return (
                 <div className="mt-3.5 border-t border-border pt-2">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
                     <span
                       className="min-w-0 truncate text-[14px] font-semibold text-text"
                       title={llm.modelId ?? undefined}
                     >
                       {backendLabel}: {llm.modelId ?? "unknown"}
                     </span>
-                    <GaugeScaleButton
-                      sparkId={spark.id}
-                      scales={gaugeScales}
-                      onChange={onGaugeScalesChange}
-                    />
                   </div>
                   <div className="mt-3 flex flex-col gap-3">
-                    <SpeedGauge label="Generation" value={llm.generationTps} floor={100} max={gaugeScales?.gen ?? null} />
-                    <SpeedGauge label="Prefill" value={llm.prefillTps} floor={1000} max={gaugeScales?.prefill ?? null} />
+                    <SpeedGauge
+                      label="Generation"
+                      value={llm.generationTps}
+                      max={modelScale.gen}
+                      fallbackScale={modelScale.isFallback}
+                    />
+                    <SpeedGauge
+                      label="Prefill"
+                      value={llm.prefillTps}
+                      max={modelScale.prefill}
+                      fallbackScale={modelScale.isFallback}
+                    />
                     {llm.backend === "vllm" && (
                       <ServingLanes llm={llm} maxNumSeqs={spark.maxNumSeqs ?? null} />
                     )}
@@ -466,67 +466,6 @@ function SparkCard({
   );
 }
 
-/** Gear popover that edits one Spark's fixed gauge scale maxima (tok/s). */
-function GaugeScaleButton({
-  sparkId,
-  scales,
-  onChange,
-}: {
-  sparkId: string;
-  scales?: { gen?: number | null; prefill?: number | null } | null;
-  onChange?: (scales: { gen: number | null; prefill: number | null }) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const gen = scales?.gen ?? null;
-  const prefill = scales?.prefill ?? null;
-
-  const update = (kind: "gen" | "prefill", raw: string) => {
-    const n = raw === "" ? null : Number(raw);
-    const v = n != null && Number.isFinite(n) && n > 0 ? n : null;
-    onChange?.({ gen: kind === "gen" ? v : gen, prefill: kind === "prefill" ? v : prefill });
-  };
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-label={`Gauge scale settings for ${sparkId}`}
-        title="Gauge scale settings"
-        className={`rounded p-1 transition-colors hover:bg-surface-hover ${open ? "text-accent" : "text-muted"}`}
-      >
-        <GearIcon className="h-3.5 w-3.5" />
-      </button>
-      {open && (
-        <div className="panel absolute right-0 top-full z-20 mt-1 w-56 space-y-2.5 p-3">
-          <p className="text-[11px] text-muted">
-            Fixed dial scale for this machine, in tok/s. Leave empty for an adaptive scale. At or
-            past the max the pointer pins and turns red.
-          </p>
-          {(
-            [
-              ["Generation", "gen", gen],
-              ["Prefill", "prefill", prefill],
-            ] as const
-          ).map(([label, kind, value]) => (
-            <label key={kind} className="block text-[11px] text-muted">
-              {label} max (tok/s)
-              <input
-                type="number"
-                min={1}
-                value={value ?? ""}
-                placeholder="adaptive"
-                onChange={(e) => update(kind, e.target.value)}
-                className="mt-0.5 w-full rounded-md border border-border bg-surface-elevated px-2 py-1 font-tabular text-[12px] text-text"
-              />
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function OverviewPage({
   sparks,
   hideOffline = false,
@@ -537,8 +476,6 @@ export function OverviewPage({
   temperatureUnit = "celsius",
   onSelectSpark,
   variant = "overview",
-  gaugeScales = {},
-  onGaugeScalesChange,
 }: OverviewPageProps) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "online" | "offline" | "issues">("all");
@@ -857,8 +794,6 @@ export function OverviewPage({
             temperatureUnit={temperatureUnit}
             onSelect={onSelectSpark}
             tokDisplay={variant === "gauges" ? "gauges" : "stats"}
-            gaugeScales={gaugeScales?.[spark.id] ?? null}
-            onGaugeScalesChange={(scales) => onGaugeScalesChange?.(spark.id, scales)}
           />
         ))}
       </div>

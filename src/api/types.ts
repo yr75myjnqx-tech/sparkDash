@@ -598,8 +598,6 @@ export interface Settings {
   benchDebugTraces: boolean;
   /** Layout density — compact (default) or comfortable. */
   density: "comfortable" | "compact";
-  /** Per-Spark fixed gauge scale maxima (tok/s) for the Gauges tab dials. */
-  gaugeScales: Record<string, { gen?: number | null; prefill?: number | null }>;
   /** Overview Fleet Energy card. Off by default. */
   showFleetEnergy: boolean;
   /** Overview active fleet exceptions strip. Off by default. */
