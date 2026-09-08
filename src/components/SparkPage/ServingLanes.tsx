@@ -108,11 +108,11 @@ export function ServingLanes({ llm, maxNumSeqs }: ServingLanesProps) {
 
       {/* Lane boxes */}
       {hasData ? (
-        <div className="flex flex-wrap items-center gap-1">
+        <div className={`flex flex-wrap items-center ${total > 12 ? "gap-0.5" : "gap-1"}`}>
           {Array.from({ length: rendered }, (_, i) => (
             <span
               key={i}
-              className={`h-3.5 w-3.5 rounded-[4px] ${
+              className={`h-3.5 ${total > 12 ? "w-2" : "w-3.5"} rounded-[3px] ${
                 i < occupied ? "bg-success" : "bg-border/60"
               }`}
             />
