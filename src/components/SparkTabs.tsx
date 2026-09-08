@@ -21,6 +21,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { SparkSnapshot } from "../api/types";
 import { PlusIcon, GridIcon, DiskIcon, GaugeIcon } from "./ui/icons";
 import { OVERVIEW_ID, FLEET_STORAGE_ID, GAUGES_ID } from "../constants";
+import { displayNodeName } from "../config/display.js";
 
 interface SparkTabsProps {
   sparks: SparkSnapshot[];
@@ -577,7 +578,7 @@ function MobileSparkMenu({
               spark.online ? "bg-success" : "bg-danger"
             }`}
           />
-          {spark.name}
+          {displayNodeName(spark.name)}
         </button>
       ))}
       <button

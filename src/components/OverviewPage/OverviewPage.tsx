@@ -4,6 +4,7 @@ import { isWorkerSpark, resolveSparkRole } from "../../api/sparkRole";
 import { shutdownAllSparks, updateAllHermes, wakeAllSparks } from "../../api/client";
 import { ConfirmShutdownDialog } from "../ConfirmShutdownDialog";
 import { MetricBar } from "../ui/MetricBar";
+import { displayNodeName } from "../../config/display.js";
 import { SpeedGauge } from "../ui/SpeedGauge";
 import { ServingLanes } from "../SparkPage/ServingLanes";
 import { FleetEnergyCard } from "./FleetEnergyCard";
@@ -142,10 +143,10 @@ function SparkCard({
               onClick={() => onSelect(spark.id)}
               className="text-left font-inherit text-inherit hover:underline"
             >
-              {spark.name}
+              {displayNodeName(spark.name)}
             </button>
           ) : (
-            spark.name
+            displayNodeName(spark.name)
           )}
         </span>
         {(() => {
@@ -292,7 +293,7 @@ function SparkCard({
           <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-border pt-3.5">
             <MiniStat
               label="GPU Power"
-              value={`${gpu?.power?.draw ?? 0}W / ${gpu?.power?.limit ?? 0}W`}
+              value={`${(gpu?.power?.draw ?? 0).toFixed(1)} W / ${Math.round(gpu?.power?.limit ?? 0)} W`}
             />
             {(() => {
               // Find the root disk by label "/" (the collector maps the host
