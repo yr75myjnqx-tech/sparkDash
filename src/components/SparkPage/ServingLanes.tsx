@@ -146,23 +146,31 @@ export function ServingLanes({ llm, maxNumSeqs }: ServingLanesProps) {
       </div>
 
       {/* Est. wait: queue_depth × mean decode time of completed requests
-          (vLLM exposes no per-request live waits without a gateway). */}
+          (vLLM exposes no per-request live waits without a gateway). Row is
+          always visible; "—" until the queue backs up. */}
       {(() => {
         const estWaitSec =
           waiting > 0 && llm.avgDecodeSeconds != null
             ? waiting * llm.avgDecodeSeconds
             : null;
-        if (estWaitSec == null) return null;
         const estWait =
-          estWaitSec < 10
-            ? `${estWaitSec.toFixed(1)}s`
-            : `${Math.round(estWaitSec)}s`;
+          estWaitSec == null
+            ? "—"
+            : estWaitSec < 10
+              ? `~${estWaitSec.toFixed(1)}s`
+              : `~${Math.round(estWaitSec)}s`;
         return (
           <div className="flex items-center justify-between rounded-md border border-warning/20 bg-warning/5 px-2 py-1.5">
             <span className="text-[10px] uppercase tracking-wide text-muted">
               Est. Wait
             </span>
-            <span className="font-tabular text-xs text-warning">~{estWait}</span>
+            <span
+              className={`font-tabular text-xs ${
+                estWaitSec != null ? "text-warning" : "text-muted"
+              }`}
+            >
+              {estWait}
+            </span>
           </div>
         );
       })()}
