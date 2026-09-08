@@ -88,7 +88,7 @@ export function SpeedGauge({ label, value, floor = 100, max = null }: SpeedGauge
       <svg
         width={200}
         height={146}
-        viewBox="0 0 132 96"
+        viewBox="-4 0 140 96"
         className="block max-w-full"
         role="img"
         aria-label={`${label} ${fmt(value)} tok/s`}
