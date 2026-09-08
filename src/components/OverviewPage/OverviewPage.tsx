@@ -379,7 +379,7 @@ function SparkCard({
                 <div className="mt-3.5 border-t border-border pt-2">
                   <div className="flex items-center justify-between gap-2">
                     <span
-                      className="min-w-0 truncate text-[12px] font-semibold text-text"
+                      className="min-w-0 truncate text-[14px] font-semibold text-text"
                       title={llm.modelId ?? undefined}
                     >
                       {backendLabel}: {llm.modelId ?? "unknown"}
@@ -390,7 +390,7 @@ function SparkCard({
                       onChange={onGaugeScalesChange}
                     />
                   </div>
-                  <div className="flex flex-col gap-3">
+                  <div className="mt-3 flex flex-col gap-3">
                     <SpeedGauge label="Generation" value={llm.generationTps} floor={100} max={gaugeScales?.gen ?? null} />
                     <SpeedGauge label="Prefill" value={llm.prefillTps} floor={1000} max={gaugeScales?.prefill ?? null} />
                     {llm.backend === "vllm" && (
