@@ -8,6 +8,7 @@ import { useMetricsHistoryTail } from "../../hooks/metricsStore";
 import { BenchmarkDialog } from "./BenchmarkDialog";
 import { PrefillBenchDialog } from "./PrefillBenchDialog";
 import { LlmDailyChart } from "./LlmDailyChart";
+import { ServingLanes } from "./ServingLanes";
 import { parseLlmTargetInput } from "../../shared/llmTarget.js";
 
 interface LlmPanelProps {
@@ -17,6 +18,8 @@ interface LlmPanelProps {
   llmPorts?: number[];
   hasApiKey?: boolean;
   onRemovePort?: (port: number) => void;
+  /** vLLM serving capacity (--max-num-seqs) for the serving lanes widget. */
+  maxNumSeqs?: number | null;
   className?: string;
 }
 
@@ -377,6 +380,7 @@ export function LlmPanel({
   llmPorts,
   hasApiKey = false,
   onRemovePort,
+  maxNumSeqs = null,
   className,
 }: LlmPanelProps) {
   // Tail keyed by port so multi-port LLM sparklines stay distinct (8b).
@@ -877,6 +881,10 @@ export function LlmPanel({
                 </div>
               </div>
             </div>
+          )}
+
+          {llm?.backend === "vllm" && (
+            <ServingLanes llm={llm} maxNumSeqs={maxNumSeqs ?? null} />
           )}
 
           {llm?.backend === "vllm" && (

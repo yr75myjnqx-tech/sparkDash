@@ -73,6 +73,11 @@ export interface SparkConfig {
   /** ComfyUI HTTP port (default 8188). */
   comfyPort?: number;
   /**
+   * Optional vLLM serving capacity (--max-num-seqs) for the serving lanes
+   * widget. Unset/null = unknown (widget falls back to run+wait total).
+   */
+  maxNumSeqs?: number | null;
+  /**
    * Opt-in: Hermes Agent CLI (nousresearch/hermes-agent) is installed on this
    * machine. When enabled, sparkDash checks for Hermes updates and can run
    * `hermes update` for you via SSH.
@@ -530,6 +535,11 @@ export interface SparkSnapshot {
   comfyMonitoring?: boolean;
   /** ComfyUI HTTP port (default 8188) */
   comfyPort?: number;
+  /**
+   * Optional vLLM serving capacity (--max-num-seqs) for the serving lanes
+   * widget. Unset/null = unknown (widget falls back to run+wait total).
+   */
+  maxNumSeqs?: number | null;
   /** Whether tailnet presence is probed (opt-in; all roles) */
   tailscaleMonitoring?: boolean;
   /** Hermes Agent update monitoring state (present in every snapshot). */

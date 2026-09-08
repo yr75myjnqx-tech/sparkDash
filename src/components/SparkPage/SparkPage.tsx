@@ -204,6 +204,7 @@ export function SparkPage({ spark, temperatureUnit, onEdit }: SparkPageProps) {
         sparkId={spark.id}
         llmPort={port}
         llmPorts={llmPorts}
+        maxNumSeqs={spark.maxNumSeqs ?? null}
         hasApiKey={Boolean(spark.llmApiKeyPorts?.includes(port))}
         onRemovePort={canRemove ? handleRemovePort : undefined}
         className={className}
