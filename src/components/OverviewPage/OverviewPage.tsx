@@ -5,6 +5,7 @@ import { shutdownAllSparks, updateAllHermes, wakeAllSparks } from "../../api/cli
 import { ConfirmShutdownDialog } from "../ConfirmShutdownDialog";
 import { MetricBar } from "../ui/MetricBar";
 import { SpeedGauge } from "../ui/SpeedGauge";
+import { ServingLanes } from "../SparkPage/ServingLanes";
 import { ActivityIcon, GearIcon, PowerOffIcon, PowerOnIcon, RotateIcon } from "../ui/icons";
 
 interface OverviewPageProps {
@@ -385,6 +386,9 @@ function SparkCard({
                   <div className="flex flex-col gap-3">
                     <SpeedGauge label="Generation" value={llm.generationTps} floor={100} max={gaugeScales?.gen ?? null} />
                     <SpeedGauge label="Prefill" value={llm.prefillTps} floor={1000} max={gaugeScales?.prefill ?? null} />
+                    {llm.backend === "vllm" && (
+                      <ServingLanes llm={llm} maxNumSeqs={spark.maxNumSeqs ?? null} />
+                    )}
                   </div>
                 </div>
               );
