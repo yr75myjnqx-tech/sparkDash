@@ -2,6 +2,7 @@
   "pollIntervalMs": 1000,
   "defaultLlmPort": 8888,
   "autoHideOffline": false,
+  "hideWorkers": false,
   "temperatureUnit": "celsius",
   "benchDebugTraces": false,
   "density": "compact"

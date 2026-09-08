@@ -21,6 +21,8 @@ const DEFAULTS = Object.freeze({
   benchDebugTraces: false,
   /** Layout density — compact (default) or comfortable. */
   density: "compact",
+  /** Per-Spark fixed gauge scale maxima: { [sparkId]: { gen, prefill } } in tok/s. */
+  gaugeScales: {},
 });
 
 /** @type {typeof DEFAULTS} */
@@ -48,6 +50,18 @@ function _clampSettings(settings) {
   // Ensure density is valid
   if (s.density !== "comfortable" && s.density !== "compact") {
     s.density = DEFAULTS.density;
+  }
+  // Sanitize gaugeScales — per-Spark { gen, prefill } positive numbers or null
+  if (s.gaugeScales == null || typeof s.gaugeScales !== "object" || Array.isArray(s.gaugeScales)) {
+    s.gaugeScales = {};
+  } else {
+    const num = (x) => (typeof x === "number" && Number.isFinite(x) && x > 0 ? x : null);
+    const clean = {};
+    for (const [id, v] of Object.entries(s.gaugeScales)) {
+      if (!v || typeof v !== "object" || Array.isArray(v)) continue;
+      clean[id] = { gen: num(v.gen), prefill: num(v.prefill) };
+    }
+    s.gaugeScales = clean;
   }
   return s;
 }

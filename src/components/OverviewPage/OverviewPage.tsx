@@ -15,6 +15,10 @@ interface OverviewPageProps {
   onSelectSpark?: (id: string) => void;
   /** "gauges" renders the same cards with tok/s speedometers (Gauges tab). */
   variant?: "overview" | "gauges";
+  /** Per-Spark fixed gauge scale maxima (from server settings). */
+  gaugeScales?: Record<string, { gen?: number | null; prefill?: number | null }>;
+  /** Persist a Spark's gauge scale maxima to server settings. */
+  onGaugeScalesChange?: (sparkId: string, scales: { gen: number | null; prefill: number | null }) => void;
 }
 
 function celsiusToFahrenheit(c: number): number {
@@ -83,8 +87,8 @@ function SparkCard({
   temperatureUnit,
   onSelect,
   tokDisplay = "stats",
-  genScaleMax = null,
-  prefillScaleMax = null,
+  gaugeScales = null,
+  onGaugeScalesChange,
 }: {
   spark: SparkSnapshot;
   headSparkName?: string | null;
@@ -92,9 +96,9 @@ function SparkCard({
   onSelect?: (id: string) => void;
   /** "gauges" swaps the tok/s numbers for prefill/gen speedometer dials. */
   tokDisplay?: "stats" | "gauges";
-  /** Fixed gauge scale maxima (tok/s); null = adaptive per dial. */
-  genScaleMax?: number | null;
-  prefillScaleMax?: number | null;
+  /** This Spark's fixed gauge scale maxima (tok/s); null = adaptive per dial. */
+  gaugeScales?: { gen?: number | null; prefill?: number | null } | null;
+  onGaugeScalesChange?: (scales: { gen: number | null; prefill: number | null }) => void;
 }) {
   const gpu = spark.metrics.gpu;
   const um = spark.metrics.unifiedMemory;
@@ -370,9 +374,18 @@ function SparkCard({
             if (!llm) return null;
             if (tokDisplay === "gauges") {
               return (
-                <div className="mt-3.5 flex flex-col gap-3 border-t border-border pt-3">
-                  <SpeedGauge label="Generation" value={llm.generationTps} floor={100} max={genScaleMax} />
-                  <SpeedGauge label="Prefill" value={llm.prefillTps} floor={1000} max={prefillScaleMax} />
+                <div className="mt-3.5 border-t border-border pt-2">
+                  <div className="flex justify-end">
+                    <GaugeScaleButton
+                      sparkId={spark.id}
+                      scales={gaugeScales}
+                      onChange={onGaugeScalesChange}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <SpeedGauge label="Generation" value={llm.generationTps} floor={100} max={gaugeScales?.gen ?? null} />
+                    <SpeedGauge label="Prefill" value={llm.prefillTps} floor={1000} max={gaugeScales?.prefill ?? null} />
+                  </div>
                 </div>
               );
             }
@@ -399,23 +412,65 @@ function SparkCard({
   );
 }
 
-/** Fixed gauge scale for one dial, persisted per-browser (null = adaptive). */
-function readGaugeScale(kind: "gen" | "prefill"): number | null {
-  try {
-    const raw = localStorage.getItem(`sparkdash.gaugeScale.${kind}`);
-    if (!raw) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  } catch {
-    return null;
-  }
-}
+/** Gear popover that edits one Spark's fixed gauge scale maxima (tok/s). */
+function GaugeScaleButton({
+  sparkId,
+  scales,
+  onChange,
+}: {
+  sparkId: string;
+  scales?: { gen?: number | null; prefill?: number | null } | null;
+  onChange?: (scales: { gen: number | null; prefill: number | null }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const gen = scales?.gen ?? null;
+  const prefill = scales?.prefill ?? null;
 
-function writeGaugeScale(kind: "gen" | "prefill", value: number | null) {
-  try {
-    if (value == null) localStorage.removeItem(`sparkdash.gaugeScale.${kind}`);
-    else localStorage.setItem(`sparkdash.gaugeScale.${kind}`, String(value));
-  } catch {}
+  const update = (kind: "gen" | "prefill", raw: string) => {
+    const n = raw === "" ? null : Number(raw);
+    const v = n != null && Number.isFinite(n) && n > 0 ? n : null;
+    onChange?.({ gen: kind === "gen" ? v : gen, prefill: kind === "prefill" ? v : prefill });
+  };
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label={`Gauge scale settings for ${sparkId}`}
+        title="Gauge scale settings"
+        className={`rounded p-1 transition-colors hover:bg-surface-hover ${open ? "text-accent" : "text-muted"}`}
+      >
+        <GearIcon className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <div className="panel absolute right-0 top-full z-20 mt-1 w-56 space-y-2.5 p-3">
+          <p className="text-[11px] text-muted">
+            Fixed dial scale for this machine, in tok/s. Leave empty for an adaptive scale. At or
+            past the max the pointer pins and turns red.
+          </p>
+          {(
+            [
+              ["Generation", "gen", gen],
+              ["Prefill", "prefill", prefill],
+            ] as const
+          ).map(([label, kind, value]) => (
+            <label key={kind} className="block text-[11px] text-muted">
+              {label} max (tok/s)
+              <input
+                type="number"
+                min={1}
+                value={value ?? ""}
+                placeholder="adaptive"
+                onChange={(e) => update(kind, e.target.value)}
+                className="mt-0.5 w-full rounded-md border border-border bg-surface-elevated px-2 py-1 font-tabular text-[12px] text-text"
+              />
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function OverviewPage({
@@ -425,6 +480,8 @@ export function OverviewPage({
   temperatureUnit = "celsius",
   onSelectSpark,
   variant = "overview",
+  gaugeScales = {},
+  onGaugeScalesChange,
 }: OverviewPageProps) {
   const withoutWorkers = hideWorkers ? sparks.filter((s) => !isWorkerSpark(s)) : sparks;
   const visibleSparks = hideOffline ? withoutWorkers.filter((s) => s.online) : withoutWorkers;
@@ -434,10 +491,6 @@ export function OverviewPage({
   const [shutdownOpen, setShutdownOpen] = useState(false);
   /** Spark ids we started a batch Hermes update on; drives the live progress bar. */
   const [batchRun, setBatchRun] = useState<string[] | null>(null);
-  /** Fixed gauge scale maxima (tok/s) for the Gauges tab; null = adaptive. */
-  const [genScaleMax, setGenScaleMax] = useState<number | null>(() => readGaugeScale("gen"));
-  const [prefillScaleMax, setPrefillScaleMax] = useState<number | null>(() => readGaugeScale("prefill"));
-  const [scaleOpen, setScaleOpen] = useState(false);
 
   const onlineShutdownCount = sparks.filter((s) => s.online).length;
   const hermesMonitoredCount = sparks.filter((s) => s.hermes?.monitoring).length;
@@ -587,59 +640,12 @@ export function OverviewPage({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--density-overview-rhythm)" }}>
       <div className="flex flex-wrap items-end justify-between gap-6">
-        <div className="flex items-center gap-2.5">
-          <h1
-            className="font-normal leading-tight tracking-tight text-text-strong"
-            style={{ fontSize: "var(--density-overview-title)" }}
-          >
-            {variant === "gauges" ? "Gauges" : "Overview"}
-          </h1>
-          {variant === "gauges" && (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setScaleOpen((v) => !v)}
-                aria-label="Gauge scale settings"
-                title="Gauge scale settings"
-                className={`icon-circle ${scaleOpen ? "text-accent" : "text-muted"}`}
-              >
-                <GearIcon className="h-4 w-4" />
-              </button>
-              {scaleOpen && (
-                <div className="panel absolute left-0 top-full z-20 mt-2 w-60 space-y-2.5 p-3">
-                  <p className="text-[11px] text-muted">
-                    Fixed dial scale in tok/s. Leave empty for an adaptive scale. At or past the
-                    max the pointer pins and turns red.
-                  </p>
-                  {(
-                    [
-                      ["Generation", "gen", genScaleMax, setGenScaleMax],
-                      ["Prefill", "prefill", prefillScaleMax, setPrefillScaleMax],
-                    ] as const
-                  ).map(([label, kind, value, setValue]) => (
-                    <label key={kind} className="block text-[11px] text-muted">
-                      {label} max (tok/s)
-                      <input
-                        type="number"
-                        min={1}
-                        value={value ?? ""}
-                        placeholder="adaptive"
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          const n = raw === "" ? null : Number(raw);
-                          const next = n != null && Number.isFinite(n) && n > 0 ? n : null;
-                          setValue(next);
-                          writeGaugeScale(kind, next);
-                        }}
-                        className="mt-0.5 w-full rounded-md border border-border bg-surface-elevated px-2 py-1 font-tabular text-[12px] text-text"
-                      />
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <h1
+          className="font-normal leading-tight tracking-tight text-text-strong"
+          style={{ fontSize: "var(--density-overview-title)" }}
+        >
+          {variant === "gauges" ? "Gauges" : "Overview"}
+        </h1>
         <div className="flex flex-wrap items-end justify-end gap-3">
           {batchMsg && (
             <span className={`text-[11px] ${batchMsg.tone === "ok" ? "text-success" : "text-danger"}`}>
@@ -756,8 +762,8 @@ export function OverviewPage({
             temperatureUnit={temperatureUnit}
             onSelect={onSelectSpark}
             tokDisplay={variant === "gauges" ? "gauges" : "stats"}
-            genScaleMax={genScaleMax}
-            prefillScaleMax={prefillScaleMax}
+            gaugeScales={gaugeScales?.[spark.id] ?? null}
+            onGaugeScalesChange={(scales) => onGaugeScalesChange?.(spark.id, scales)}
           />
         ))}
       </div>

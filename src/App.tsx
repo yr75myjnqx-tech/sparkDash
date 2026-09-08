@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSnapshot } from "./hooks/useSnapshot";
 import { useAppRoute, useRoute } from "./hooks/useRoute";
-import { fetchSparks, reorderSparks, fetchSettings } from "./api/client";
+import { fetchSparks, reorderSparks, fetchSettings, updateSettings } from "./api/client";
 import { SparkTabs } from "./components/SparkTabs";
 import { AddSparkDialog } from "./components/AddSparkDialog";
 import { EditSparkDialog } from "./components/EditSparkDialog";
@@ -196,6 +196,17 @@ function DashboardApp() {
     setSettings(s);
   }, []);
 
+  /** Persist per-Spark gauge scale maxima (edited from the Gauges tab). */
+  const handleGaugeScales = useCallback(
+    (sparkId: string, scales: { gen: number | null; prefill: number | null }) => {
+      const current = settings?.gaugeScales ?? {};
+      updateSettings({ gaugeScales: { ...current, [sparkId]: scales } })
+        .then(setSettings)
+        .catch((err) => console.error("Failed to save gauge scales:", err));
+    },
+    [settings]
+  );
+
   // Apply layout density (comfortable/compact) from persisted settings.
   useEffect(() => {
     if (settings?.density) {
@@ -319,6 +330,8 @@ function DashboardApp() {
               hideWorkers={hideWorkers}
               temperatureUnit={settings?.temperatureUnit ?? "celsius"}
               onSelectSpark={navigate}
+              gaugeScales={settings?.gaugeScales ?? {}}
+              onGaugeScalesChange={handleGaugeScales}
             />
           ) : displayActive ? (
             <SparkPage
