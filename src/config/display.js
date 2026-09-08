@@ -64,6 +64,20 @@ export const MODEL_SCALES = {
 /** Scale for a model key absent from MODEL_SCALES — always badged DEFAULT SCALE. */
 export const FALLBACK_SCALE = { gen: 100, prefill: 1000 };
 
+/** Gauge/sparkline scale for a served model name (I-2′). Unknown keys get the
+ * fallback — callers must render the DEFAULT SCALE badge (AT-17). */
+export function scaleForModel(modelId) {
+  const key = (modelId ?? "").trim();
+  const entry = Object.prototype.hasOwnProperty.call(MODEL_SCALES, key)
+    ? MODEL_SCALES[key]
+    : null;
+  return {
+    gen: entry?.gen ?? FALLBACK_SCALE.gen,
+    prefill: entry?.prefill ?? FALLBACK_SCALE.prefill,
+    isFallback: entry == null,
+  };
+}
+
 /** Normalise node names to the Operator's convention (§5.4, AT-15).
  * Display layer only — hosts are never renamed. Only the gxN pattern is
  * touched; anything else (e.g. upstream "Spark 1") passes through. */
@@ -74,33 +88,61 @@ export function displayNodeName(name) {
 
 // ─── Precision rules (§5.7) — display-layer only, never at the API boundary ──
 
-export function fmtTemp(celsius: number): string {
+export function fmtTemp(celsius) {
   return `${Math.round(celsius)}°C`;
 }
 
-export function fmtPower(watts: number): string {
+export function fmtPower(watts) {
   return `${watts.toFixed(1)} W`;
 }
 
 /** used / total capacity line, 1 decimal GB (§5.3). */
-export function fmtCapacityGb(usedGb: number, totalGb: number): string {
+export function fmtCapacityGb(usedGb, totalGb) {
   return `${usedGb.toFixed(1)} / ${totalGb.toFixed(1)} GB`;
 }
 
 /** Integer GB for "Available"-style headroom figures. */
-export function fmtGbInteger(gb: number): string {
+export function fmtGbInteger(gb) {
   return `${Math.round(gb)} GB`;
 }
 
-export function fmtTok(tps: number): string {
+export function fmtTok(tps) {
   return `${Math.round(tps)}`;
 }
 
-export function fmtPct(frac: number): string {
+export function fmtPct(frac) {
   return `${Math.round(frac * 100)}%`;
 }
 
 /** TTFT / latency aggregates: 1 decimal s (§5.7). */
-export function fmtSeconds(seconds: number): string {
+export function fmtSeconds(seconds) {
   return `${seconds.toFixed(1)}s`;
+}
+
+/**
+ * Trend direction over the tail of a metric history, for the visually-hidden
+ * sparkline summary (§5.1): least-squares slope over the last `windowSamples`,
+ * reported only when |slope| ≥ `thresholdPerMin`. Assumes the upstream 2 s
+ * telemetry cadence. Returns "rising" | "falling" | "steady" | null (too few
+ * samples).
+ */
+export function describeTrend(values, thresholdPerMin, windowSamples = 60, cadenceS = 2) {
+  const tail = values.slice(-windowSamples);
+  const n = tail.length;
+  if (n < 10) return null;
+  const xMin = ((n - 1) * cadenceS) / 60; // window length in minutes
+  const mx = xMin / 2;
+  const my = tail.reduce((a, b) => a + b, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    const x = (i * cadenceS) / 60;
+    num += (x - mx) * (tail[i] - my);
+    den += (x - mx) ** 2;
+  }
+  if (den === 0) return "steady";
+  const slope = num / den; // units per minute
+  if (slope >= thresholdPerMin) return "rising";
+  if (slope <= -thresholdPerMin) return "falling";
+  return "steady";
 }

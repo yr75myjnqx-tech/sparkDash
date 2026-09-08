@@ -23,6 +23,14 @@ export const MODEL_SCALES: Record<
 
 export const FALLBACK_SCALE: { gen: number; prefill: number };
 
+/** Scale for a served model name. `isFallback` true when the key is unknown —
+ * callers must render the DEFAULT SCALE badge (AT-17). */
+export function scaleForModel(modelId: string | null | undefined): {
+  gen: number;
+  prefill: number;
+  isFallback: boolean;
+};
+
 export function displayNodeName(name: string | null | undefined): string;
 
 export function fmtTemp(celsius: number): string;
@@ -32,3 +40,14 @@ export function fmtGbInteger(gb: number): string;
 export function fmtTok(tps: number): string;
 export function fmtPct(frac: number): string;
 export function fmtSeconds(seconds: number): string;
+
+/**
+ * Trend direction over the tail of a metric history ("rising" | "falling" |
+ * "steady" | null when too few samples). Slope threshold in units/minute.
+ */
+export function describeTrend(
+  values: readonly number[],
+  thresholdPerMin: number,
+  windowSamples?: number,
+  cadenceS?: number
+): "rising" | "falling" | "steady" | null;

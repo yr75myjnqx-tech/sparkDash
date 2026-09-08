@@ -4,7 +4,9 @@ import { isWorkerSpark, resolveSparkRole } from "../../api/sparkRole";
 import { shutdownAllSparks, updateAllHermes, wakeAllSparks } from "../../api/client";
 import { ConfirmShutdownDialog } from "../ConfirmShutdownDialog";
 import { MetricBar } from "../ui/MetricBar";
-import { displayNodeName } from "../../config/display.js";
+import { Sparkline } from "../ui/Sparkline";
+import { displayNodeName, describeTrend, DISPLAY } from "../../config/display.js";
+import { useMetricsHistoryTail } from "../../hooks/metricsStore";
 import { SpeedGauge } from "../ui/SpeedGauge";
 import { ServingLanes } from "../SparkPage/ServingLanes";
 import { FleetEnergyCard } from "./FleetEnergyCard";
@@ -106,6 +108,11 @@ function SparkCard({
   const um = spark.metrics.unifiedMemory;
   const online = spark.online;
 
+  // Trend histories for the fixed-domain sparklines (§5.1): 5-min window at
+  // the 2 s telemetry cadence, same ring-buffer infrastructure as GpuPanel.
+  const tempHistory = useMetricsHistoryTail(spark.id, "gpu.temp");
+  const usageHistory = useMetricsHistoryTail(spark.id, "gpu.usage");
+
   const usage = gpu?.usage ?? 0;
   const tempRaw = gpu?.temperature ?? 0;
   const displayTemp = temperatureUnit === "fahrenheit" ? celsiusToFahrenheit(tempRaw) : tempRaw;
@@ -114,13 +121,13 @@ function SparkCard({
   const vramUsed = gpu?.vram?.used ?? um?.used ?? 0;
   const vramTotal = gpu?.vram?.total ?? um?.total ?? 0;
 
-  // Temperature bar: cool → success, warm → warning, hot → danger
-  const tempBarColor =
-    tempRaw > 85 ? "bg-danger" : tempRaw > 65 ? "bg-warning" : tempRaw > 40 ? "bg-accent" : "bg-success";
-  // Usage bar: accent for moderate, warning high, danger critical
-  const usageBarColor = usage > 85 ? "bg-danger" : usage > 60 ? "bg-warning" : "bg-accent";
-  // VRAM allocation: accent normal → warning/danger as it fills
-  const vramBarColor = vramPct > 85 ? "bg-danger" : vramPct > 60 ? "bg-warning" : "bg-accent";
+  // Utilisation is never risk-coloured (I-3): usage is always neutral accent;
+  // temperature is neutral accent with the warn band + throttle rule drawn
+  // inside its fixed-domain sparkline. Only capacity (VRAM/storage fullness)
+  // takes warn/risk, via explicit MetricBar thresholds.
+  const tempTrend = describeTrend(tempHistory, 0.5);
+  const usageTrend = describeTrend(usageHistory, 2); // %/min
+  const vramBarColor = "bg-accent";
 
   return (
     <div
@@ -243,33 +250,44 @@ function SparkCard({
                 />
               );
             })()}
-            <MetricBar
-              label={
-                spark.kind === "host" || (spark.metrics.cpu?.temperature ?? 0) > 0
-                  ? "GPU"
-                  : "Temperature"
-              }
-              value={displayTemp}
-              max={temperatureUnit === "fahrenheit" ? 212 : 100}
-              color={tempBarColor}
-              caption={tempLabel}
-            />
+            {/* Temperature — trend is a sparkline, not a bar (§5.1): fixed
+                20–95 °C domain, warn band, throttle rule. */}
+            <div className="space-y-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs text-muted">
+                  {spark.kind === "host" || (spark.metrics.cpu?.temperature ?? 0) > 0
+                    ? "GPU"
+                    : "Temperature"}
+                </span>
+                <span className="font-tabular text-sm text-text">{tempLabel}</span>
+              </div>
+              <Sparkline
+                data={tempHistory}
+                domain={DISPLAY.TEMP_DOMAIN_C}
+                width={300}
+                height={26}
+                fullWidth
+                warnBand={[DISPLAY.TEMP_WARN_C, DISPLAY.TEMP_DOMAIN_C[1]]}
+                ruleAt={DISPLAY.TEMP_THROTTLE_C}
+                axisLabel={`axis 20–95 °C, warn ≥ ${DISPLAY.TEMP_WARN_C} °C, throttle line ${DISPLAY.TEMP_THROTTLE_C} °C`}
+                summary={
+                  tempTrend
+                    ? `GPU temperature ${displayTemp} degrees Celsius, ${tempTrend} over the last 5 minutes`
+                    : `GPU temperature ${displayTemp} degrees Celsius`
+                }
+              />
+            </div>
             {(spark.metrics.cpu?.temperature ?? 0) > 0 && (() => {
               const cpuRaw = spark.metrics.cpu?.temperature ?? 0;
               const cpuDisplay =
                 temperatureUnit === "fahrenheit" ? celsiusToFahrenheit(cpuRaw) : cpuRaw;
               const cpuLabel =
                 temperatureUnit === "fahrenheit" ? `${cpuDisplay}°F` : `${cpuDisplay}°C`;
-              const cpuBarColor =
-                cpuRaw > 95 ? "bg-danger" : cpuRaw > 85 ? "bg-warning" : cpuRaw > 50 ? "bg-accent" : "bg-success";
               return (
-                <MetricBar
-                  label="CPU"
-                  value={cpuDisplay}
-                  max={temperatureUnit === "fahrenheit" ? 212 : 100}
-                  color={cpuBarColor}
-                  caption={cpuLabel}
-                />
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xs text-muted">CPU</span>
+                  <span className="font-tabular text-sm text-text">{cpuLabel}</span>
+                </div>
               );
             })()}
             {gpu?.throttle?.thermal && (
@@ -280,13 +298,26 @@ function SparkCard({
                 Thermal throttle
               </div>
             )}
-            <MetricBar
-              label="Usage"
-              value={usage}
-              max={100}
-              color={usageBarColor}
-              caption={`${usage}%`}
-            />
+            {/* Usage — utilisation is never risk-coloured (I-3). */}
+            <div className="space-y-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs text-muted">Usage</span>
+                <span className="font-tabular text-sm text-text">{usage}%</span>
+              </div>
+              <Sparkline
+                data={usageHistory}
+                domain={DISPLAY.USAGE_DOMAIN}
+                width={300}
+                height={26}
+                fullWidth
+                axisLabel="axis 0–100 %"
+                summary={
+                  usageTrend
+                    ? `GPU usage ${usage} percent, ${usageTrend} over the last 5 minutes`
+                    : `GPU usage ${usage} percent`
+                }
+              />
+            </div>
           </div>
 
           {/* Secondary stats */}

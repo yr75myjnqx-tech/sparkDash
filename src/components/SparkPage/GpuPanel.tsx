@@ -4,6 +4,7 @@ import { Sparkline } from "../ui/Sparkline";
 import { Panel } from "../ui/Panel";
 import { ActivityIcon } from "../ui/icons";
 import { MetricBar } from "../ui/MetricBar";
+import { DISPLAY } from "../../config/display.js";
 import { useMetricsHistoryTail } from "../../hooks/metricsStore";
 
 interface GpuPanelProps {
@@ -104,19 +105,11 @@ export function GpuPanel({ gpu, cpu, unifiedMemory, sparkId, temperatureUnit, cl
     setNvErrSinceReset(0);
   };
 
-  const tempColor =
-    temperature > 85
-      ? "var(--color-danger)"
-      : temperature > 65
-        ? "var(--color-warning)"
-        : "var(--color-accent)";
-  // GB10 junction bands (warn 85 / crit 95) — idle CPU sits ~70°C, so GPU 65/85 would pin amber.
-  const cpuTempColor =
-    cpuTemperature > 95
-      ? "var(--color-danger)"
-      : cpuTemperature > 85
-        ? "var(--color-warning)"
-        : "var(--color-accent)";
+  // Sparkline colors follow §5.6: compute utilisation is never risk-coloured
+  // (I-3); temperature is neutral accent with the warn band + throttle rule
+  // drawn inside the sparkline (fixed domain 20–95 °C).
+  const tempColor = "var(--color-accent)";
+  const cpuTempColor = "var(--color-accent)";
 
   return (
     <Panel
@@ -129,27 +122,56 @@ export function GpuPanel({ gpu, cpu, unifiedMemory, sparkId, temperatureUnit, cl
       <MetricRow
         label="Usage"
         color="var(--color-accent)"
-        spark={<Sparkline data={usageHistory} color="var(--color-accent)" width={180} />}
+        spark={
+          <Sparkline
+            data={usageHistory}
+            domain={DISPLAY.USAGE_DOMAIN}
+            color="var(--color-accent)"
+            width={180}
+            axisLabel="axis 0–100 %"
+            summary={`GPU usage ${usage} percent over the last 5 minutes`}
+          />
+        }
         value={<span className="text-text-strong">{usage}%</span>}
       />
       <MetricRow
         label="Temperature"
         color={tempColor}
-        spark={<Sparkline data={tempHistory} color={tempColor} width={180} />}
+        spark={
+          <Sparkline
+            data={tempHistory}
+            domain={DISPLAY.TEMP_DOMAIN_C}
+            color={tempColor}
+            width={180}
+            warnBand={[DISPLAY.TEMP_WARN_C, DISPLAY.TEMP_DOMAIN_C[1]]}
+            ruleAt={DISPLAY.TEMP_THROTTLE_C}
+            axisLabel={`axis 20–95 °C, warn ≥ ${DISPLAY.TEMP_WARN_C} °C, throttle line ${DISPLAY.TEMP_THROTTLE_C} °C`}
+            summary={`GPU temperature ${temperature} degrees Celsius over the last 5 minutes`}
+          />
+        }
         value={<span className="text-text-strong">{tempLabel}</span>}
       />
       {cpuTemperature > 0 && (
         <MetricRow
           label="CPU"
           color={cpuTempColor}
-          spark={<Sparkline data={cpuTempHistory} color={cpuTempColor} width={180} />}
+          spark={
+            <Sparkline
+              data={cpuTempHistory}
+              domain={[20, 105]}
+              color={cpuTempColor}
+              width={180}
+              axisLabel="axis 20–105 °C"
+              summary={`CPU temperature ${cpuTemperature} degrees Celsius over the last 5 minutes`}
+            />
+          }
           value={<span className="text-text-strong">{cpuTempLabel}</span>}
         />
       )}
       <div className="flex justify-between text-sm">
         <span className="text-muted">GPU Power</span>
         <span className="font-tabular text-sm text-text">
-          {powerDraw}W / {powerLimit}W
+          {powerDraw.toFixed(1)} W / {Math.round(powerLimit)} W
         </span>
       </div>
 

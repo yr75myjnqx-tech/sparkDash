@@ -13,6 +13,7 @@ import { BenchmarkDialog } from "./BenchmarkDialog";
 import { PrefillBenchDialog } from "./PrefillBenchDialog";
 import { LlmDailyChart } from "./LlmDailyChart";
 import { parseLlmTargetInput } from "../../shared/llmTarget.js";
+import { scaleForModel } from "../../config/display.js";
 import { LlmTrendChart } from "./LlmTrendChart";
 
 interface LlmPanelProps {
@@ -444,6 +445,9 @@ export function LlmPanel({
 
   const generationTps = llm?.generationTps ?? 0;
   const prefillTps = llm?.prefillTps ?? 0;
+  // Fixed gauge/sparkline scale for the served model (I-2′) — same key on
+  // every node serving the same model, fallback badged DEFAULT SCALE.
+  const modelScale = scaleForModel(llm?.modelId);
   const showPrefillSplit = llm?.cachedPrefillTps != null || llm?.uncachedPrefillTps != null;
   const cachedPrefillTps = llm?.cachedPrefillTps ?? 0;
   const uncachedPrefillTps = llm?.uncachedPrefillTps ?? 0;
@@ -699,14 +703,14 @@ export function LlmPanel({
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted">Generation tok/s</span>
             <div className="flex items-center gap-2">
-              <Sparkline data={genHistory} color="var(--color-accent)" height={24} />
+              <Sparkline data={genHistory} domain={[0, modelScale.gen]} color="var(--color-accent)" height={24} axisLabel={`axis 0–${modelScale.gen} tok/s`} summary={`Generation rate ${Math.round(generationTps)} tokens per second over the last 5 minutes`} />
               <div className="text-right">
                 <div className="font-tabular text-sm font-semibold text-accent">
-                  {generationTps.toFixed(1)}
+                  {Math.round(generationTps)}
                 </div>
                 {genAvg != null && (
                   <div className="font-tabular text-[9px] text-muted">
-                    avg {genAvg >= 100 ? genAvg.toFixed(0) : genAvg.toFixed(1)}
+                    avg {Math.round(genAvg)}
                   </div>
                 )}
               </div>
@@ -718,14 +722,14 @@ export function LlmPanel({
           >
             <span className="text-xs text-muted">Prefill tok/s</span>
             <div className="flex items-center gap-2">
-              <Sparkline data={prefillHistory} color="var(--color-text)" height={24} />
+              <Sparkline data={prefillHistory} domain={[0, modelScale.prefill]} color="var(--color-text)" height={24} axisLabel={`axis 0–${modelScale.prefill} tok/s`} summary={`Prefill rate ${Math.round(prefillTps)} tokens per second over the last 5 minutes`} />
               <div className="text-right">
                 <div className="font-tabular text-sm font-semibold text-text">
-                  {prefillTps.toFixed(1)}
+                  {Math.round(prefillTps)}
                 </div>
                 {prefillAvg != null && (
                   <div className="font-tabular text-[9px] text-muted">
-                    avg {prefillAvg >= 100 ? prefillAvg.toFixed(0) : prefillAvg.toFixed(1)}
+                    avg {Math.round(prefillAvg)}
                   </div>
                 )}
               </div>
@@ -739,14 +743,14 @@ export function LlmPanel({
               >
                 <span className="text-xs text-muted">Cached prefill tok/s</span>
                 <div className="flex items-center gap-2">
-                  <Sparkline data={cachedPrefillHistory} color="var(--color-muted)" height={24} />
+                  <Sparkline data={cachedPrefillHistory} domain={[0, modelScale.prefill]} color="var(--color-muted)" height={24} axisLabel={`axis 0–${modelScale.prefill} tok/s`} summary={`Cached prefill rate ${Math.round(cachedPrefillTps)} tokens per second over the last 5 minutes`} />
                   <div className="text-right">
                     <div className="font-tabular text-sm font-semibold text-muted">
-                      {cachedPrefillTps.toFixed(1)}
+                      {Math.round(cachedPrefillTps)}
                     </div>
                     {cachedPrefillAvg != null && (
                       <div className="font-tabular text-[9px] text-muted">
-                        avg {cachedPrefillAvg >= 100 ? cachedPrefillAvg.toFixed(0) : cachedPrefillAvg.toFixed(1)}
+                        avg {Math.round(cachedPrefillAvg)}
                       </div>
                     )}
                   </div>
@@ -758,14 +762,14 @@ export function LlmPanel({
               >
                 <span className="text-xs text-muted">Uncached prefill tok/s</span>
                 <div className="flex items-center gap-2">
-                  <Sparkline data={uncachedPrefillHistory} color="var(--color-text)" height={24} />
+                  <Sparkline data={uncachedPrefillHistory} domain={[0, modelScale.prefill]} color="var(--color-text)" height={24} axisLabel={`axis 0–${modelScale.prefill} tok/s`} summary={`Uncached prefill rate ${Math.round(uncachedPrefillTps)} tokens per second over the last 5 minutes`} />
                   <div className="text-right">
                     <div className="font-tabular text-sm font-semibold text-text">
-                      {uncachedPrefillTps.toFixed(1)}
+                      {Math.round(uncachedPrefillTps)}
                     </div>
                     {uncachedPrefillAvg != null && (
                       <div className="font-tabular text-[9px] text-muted">
-                        avg {uncachedPrefillAvg >= 100 ? uncachedPrefillAvg.toFixed(0) : uncachedPrefillAvg.toFixed(1)}
+                        avg {Math.round(uncachedPrefillAvg)}
                       </div>
                     )}
                   </div>

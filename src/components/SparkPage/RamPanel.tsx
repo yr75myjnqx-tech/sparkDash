@@ -3,6 +3,7 @@ import { Sparkline } from "../ui/Sparkline";
 import { Panel } from "../ui/Panel";
 import { MemoryIcon } from "../ui/icons";
 import { MetricBar } from "../ui/MetricBar";
+import { DISPLAY } from "../../config/display.js";
 import { useMetricsHistoryTail } from "../../hooks/metricsStore";
 
 interface RamPanelProps {
@@ -38,13 +39,9 @@ export function RamPanel({ ram, cpu, sparkId, temperatureUnit, className }: RamP
   const displayTemp =
     temperatureUnit === "fahrenheit" ? celsiusToFahrenheit(temperature) : temperature;
   const tempLabel = temperatureUnit === "fahrenheit" ? `${displayTemp}°F` : `${displayTemp}°C`;
-  // Generic CPU junction-style bands (not GB10 GPU 65/85 — idle x86 often sits ~50–70).
-  const tempColor =
-    temperature > 95
-      ? "var(--color-danger)"
-      : temperature > 85
-        ? "var(--color-warning)"
-        : "var(--color-accent)";
+  // RAM usage % and CPU temperature are utilisation/trend metrics: neutral
+  // accent only, fixed domains (I-1/I-3) — never risk-coloured.
+  const tempColor = "var(--color-accent)";
 
   return (
     <Panel
@@ -69,7 +66,7 @@ export function RamPanel({ ram, cpu, sparkId, temperatureUnit, className }: RamP
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted">Usage</span>
               <div className="flex items-center gap-3">
-                <Sparkline data={history} color="var(--color-accent)" width={180} />
+                <Sparkline data={history} domain={[0, 100]} color="var(--color-accent)" width={180} axisLabel="axis 0–100 %" summary={`RAM usage ${percentage} percent over the last 5 minutes`} />
                 <span className="font-tabular text-sm font-semibold text-text">{percentage}%</span>
               </div>
             </div>
@@ -86,7 +83,7 @@ export function RamPanel({ ram, cpu, sparkId, temperatureUnit, className }: RamP
           <span className="text-muted">CPU</span>
           <div className="flex items-center gap-3">
             <span style={{ color: tempColor }}>
-              <Sparkline data={tempHistory} color={tempColor} width={180} />
+              <Sparkline data={tempHistory} domain={DISPLAY.TEMP_DOMAIN_C} color={tempColor} width={180} axisLabel="axis 20–95 °C" summary={`CPU temperature ${temperature} degrees Celsius over the last 5 minutes`} />
             </span>
             <span className="font-tabular text-sm font-semibold text-text">{tempLabel}</span>
           </div>
