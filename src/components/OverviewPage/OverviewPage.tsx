@@ -26,11 +26,6 @@ function celsiusToFahrenheit(c: number): number {
   return Math.round(c * 9 / 5 + 32);
 }
 
-function formatMb(mb: number): string {
-  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
-  return `${Math.round(mb)} MB`;
-}
-
 /** Format a storage value in MB, stripping trailing ".0" and optionally omitting the unit. */
 function fmtStorage(mb: number, unit: boolean): string {
   const val = mb >= 1024 ? mb / 1024 : mb;
@@ -112,7 +107,6 @@ function SparkCard({
   const vramPct = gpu?.vram?.percentage ?? um?.percentage ?? 0;
   const vramUsed = gpu?.vram?.used ?? um?.used ?? 0;
   const vramTotal = gpu?.vram?.total ?? um?.total ?? 0;
-  const vramAvail = gpu?.vram?.available ?? um?.available ?? 0;
 
   // Temperature bar: cool → success, warm → warning, hot → danger
   const tempBarColor =
@@ -295,13 +289,6 @@ function SparkCard({
               label="GPU Power"
               value={`${gpu?.power?.draw ?? 0}W / ${gpu?.power?.limit ?? 0}W`}
             />
-            {vramAvail > 0 && (
-              <MiniStat
-                label="Available"
-                value={formatMb(vramAvail)}
-                tone={vramAvail < 4096 ? "danger" : vramAvail < 16384 ? "warning" : "accent"}
-              />
-            )}
             {(() => {
               // Find the root disk by label "/" (the collector maps the host
               // root mount to that label). Fall back to the GB10 partition name
@@ -345,6 +332,8 @@ function SparkCard({
               const llmArr = spark.metrics.llm;
               const llm = Array.isArray(llmArr) ? llmArr.find((l) => l.available) : null;
               if (!llm) return null;
+              // Gauges tab: the model id is the section header above the dials.
+              if (tokDisplay === "gauges") return null;
               return (
                 <MiniStat
                   label={
@@ -374,9 +363,27 @@ function SparkCard({
             const llm = Array.isArray(llmArr) ? llmArr.find((l) => l.available) : null;
             if (!llm) return null;
             if (tokDisplay === "gauges") {
+              const backendLabel =
+                llm.backend === "vllm"
+                  ? "vLLM"
+                  : llm.backend === "ds4"
+                    ? "ds4"
+                    : llm.backend === "sglang"
+                      ? "sgLang"
+                      : llm.backend === "exl3"
+                        ? "EXL3"
+                        : llm.backend === "llama.cpp"
+                          ? "llama.cpp"
+                          : (llm.backend ?? "LLM");
               return (
                 <div className="mt-3.5 border-t border-border pt-2">
-                  <div className="flex justify-end">
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className="min-w-0 truncate text-[12px] font-semibold text-text"
+                      title={llm.modelId ?? undefined}
+                    >
+                      {backendLabel}: {llm.modelId ?? "unknown"}
+                    </span>
                     <GaugeScaleButton
                       sparkId={spark.id}
                       scales={gaugeScales}
