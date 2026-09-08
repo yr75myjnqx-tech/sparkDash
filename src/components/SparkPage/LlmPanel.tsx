@@ -15,6 +15,7 @@ import { LlmDailyChart } from "./LlmDailyChart";
 import { parseLlmTargetInput } from "../../shared/llmTarget.js";
 import { scaleForModel, fmtSeconds, DISPLAY } from "../../config/display.js";
 import { LlmTrendChart } from "./LlmTrendChart";
+import { useShareMode, aliasForModel } from "../../hooks/shareMode";
 
 interface LlmPanelProps {
   llm: LlmMetrics | null;
@@ -429,6 +430,7 @@ export function LlmPanel({
   }, []);
   /** Which vLLM metric info tip is open (kvCache | requests | ttftP95 | preempts). */
   const [metricInfoId, setMetricInfoId] = useState<string | null>(null);
+  const shareMode = useShareMode();
   const engineInfoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearEngineInfoTimer = useCallback(() => {
@@ -536,26 +538,28 @@ export function LlmPanel({
               <span>Remove</span>
             </button>
           )}
-          <button
-            type="button"
-            title={showSettings ? "Done" : "LLM settings"}
-            onClick={() => {
-              if (showSettings) {
-                setPortDraft(String(llmPort));
-                setApiKeyDraft("");
-                setClearApiKey(false);
-                setSaveError(null);
-              }
-              setShowSettings(!showSettings);
-            }}
-            disabled={saving}
-            className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surface-hover disabled:opacity-50 ${
-              showSettings ? "bg-surface-elevated text-text" : ""
-            }`}
-          >
-            <GearIcon />
-            <span>{showSettings ? "Done" : "Settings"}</span>
-          </button>
+          {!shareMode && (
+            <button
+              type="button"
+              title={showSettings ? "Done" : "LLM settings"}
+              onClick={() => {
+                if (showSettings) {
+                  setPortDraft(String(llmPort));
+                  setApiKeyDraft("");
+                  setClearApiKey(false);
+                  setSaveError(null);
+                }
+                setShowSettings(!showSettings);
+              }}
+              disabled={saving}
+              className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:bg-surface-hover disabled:opacity-50 ${
+                showSettings ? "bg-surface-elevated text-text" : ""
+              }`}
+            >
+              <GearIcon />
+              <span>{showSettings ? "Done" : "Settings"}</span>
+            </button>
+          )}
         </div>
       }
     >
@@ -685,14 +689,15 @@ export function LlmPanel({
             {llm?.modelId && (
               <span
                 className="min-w-0 flex-1 whitespace-normal break-words text-xs leading-snug text-text [overflow-wrap:anywhere]"
-                title={llm.modelId}
+                title={shareMode ? aliasForModel(llm.modelId) : llm.modelId}
               >
-                {llm.modelId}
+                {shareMode ? aliasForModel(llm.modelId) : llm.modelId}
               </span>
             )}
             <span className="shrink-0 font-tabular text-[10px] text-muted">:{llmPort}</span>
           </div>
           {llm?.modelPath &&
+            !shareMode &&
             llm.modelPath !== llm.modelId &&
             !llm.modelPath.includes("models--") && (
             <div className="-mt-1.5 truncate text-[10px] text-muted" title={llm.modelPath}>

@@ -18,6 +18,7 @@ import { ErrorBanner } from "./components/ui/ErrorBanner";
 import { OVERVIEW_ID, FLEET_STORAGE_ID, GAUGES_ID } from "./constants";
 import type { Settings, SparkSnapshot } from "./api/types";
 import { isWorkerSpark } from "./api/sparkRole";
+import { ShareModeProvider, useShareMode } from "./hooks/shareMode";
 
 /** Keep hidden worker ids in their original slots when the visible tabs are reordered. */
 function mergeTabOrderKeepingHidden(
@@ -145,6 +146,7 @@ function DashboardApp() {
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const shareMode = useShareMode();
   /** Used when WS is down so add/delete still updates the tab bar */
   const [fallbackSparks, setFallbackSparks] = useState<SparkSnapshot[]>([]);
   const staleAfterMs = Math.max(10_000, 3 * (refreshInterval ?? 2_000));
@@ -352,6 +354,14 @@ function DashboardApp() {
           now={telemetryNow}
           stale={telemetryStale}
         />
+        {shareMode && (
+          <div
+            className="rounded border border-warning/40 bg-warning/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-warning"
+            role="status"
+          >
+            Share mode — identifiers redacted
+          </div>
+        )}
         <ErrorBanner message={actionError} onDismiss={() => setActionError(null)} />
         <main className={telemetryStale || !connected ? "telemetry-stale" : undefined}>
           {isFleetStorage ? (
@@ -424,10 +434,15 @@ function DashboardApp() {
 
 function App() {
   const route = useAppRoute();
-  if (route.mode === "showcase" && route.showcaseSparkId) {
-    return <ShowcasePage sparkId={route.showcaseSparkId} />;
-  }
-  return <DashboardApp />;
+  return (
+    <ShareModeProvider>
+      {route.mode === "showcase" && route.showcaseSparkId ? (
+        <ShowcasePage sparkId={route.showcaseSparkId} />
+      ) : (
+        <DashboardApp />
+      )}
+    </ShareModeProvider>
+  );
 }
 
 export default App;

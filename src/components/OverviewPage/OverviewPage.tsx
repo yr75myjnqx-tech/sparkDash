@@ -7,6 +7,7 @@ import { MetricBar } from "../ui/MetricBar";
 import { Sparkline } from "../ui/Sparkline";
 import { displayNodeName, describeTrend, scaleForModel, DISPLAY } from "../../config/display.js";
 import { useMetricsHistoryTail, useSparkLastSeen } from "../../hooks/metricsStore";
+import { aliasForModel, aliasForNode, useShareMode } from "../../hooks/shareMode";
 import { SpeedGauge } from "../ui/SpeedGauge";
 import { ServingLanes } from "../SparkPage/ServingLanes";
 import { FleetEnergyCard } from "./FleetEnergyCard";
@@ -98,6 +99,12 @@ function SparkCard({
   const gpu = spark.metrics.gpu;
   const um = spark.metrics.unifiedMemory;
   const online = spark.online;
+  // Share-safe mode (§5.8): identifiers never enter the DOM — host and model
+  // names render as session-stable aliases, capacity as percentages only.
+  const shareMode = useShareMode();
+  const nodeName = shareMode ? aliasForNode(spark.id) : displayNodeName(spark.name);
+  const displayModel = (modelId: string | null | undefined) =>
+    shareMode ? aliasForModel(modelId) : (modelId ?? "unknown");
 
   // Data freshness (§5.5 / I-5): `online` asserts host reachability only —
   // metric currency is measured from the last WS frame that carried this
@@ -155,10 +162,10 @@ function SparkCard({
               onClick={() => onSelect(spark.id)}
               className="text-left font-inherit text-inherit hover:underline"
             >
-              {displayNodeName(spark.name)}
+              {nodeName}
             </button>
           ) : (
-            displayNodeName(spark.name)
+            nodeName
           )}
         </span>
         {(() => {
@@ -169,9 +176,11 @@ function SparkCard({
             role === "head"
               ? "Cluster head Spark"
               : role === "worker"
-                ? spark.workerLabel?.trim()
-                  ? `${spark.workerLabel.trim()} · distributed LLM worker`
-                  : "Distributed LLM worker"
+                ? shareMode
+                  ? "Distributed LLM worker"
+                  : spark.workerLabel?.trim()
+                    ? `${spark.workerLabel.trim()} · distributed LLM worker`
+                    : "Distributed LLM worker"
                 : spark.llmMonitoring === false
                   ? "Standalone — LLM monitoring off"
                   : "Standalone Spark";
@@ -252,7 +261,13 @@ function SparkCard({
               value={vramUsed}
               max={vramTotal}
               color={vramBarColor}
-              caption={vramTotal > 0 ? `${fmtStorage(vramUsed, false)} / ${fmtStorage(vramTotal, true)}` : "—"}
+              caption={
+                vramTotal > 0
+                  ? shareMode
+                    ? `${Math.round(vramPct)}% used`
+                    : `${fmtStorage(vramUsed, false)} / ${fmtStorage(vramTotal, true)}`
+                  : "—"
+              }
             />
             {spark.kind === "host" && (() => {
               // Non-Spark hosts: system RAM is separate from discrete VRAM.
@@ -267,7 +282,13 @@ function SparkCard({
                   value={rUsed}
                   max={rTotal}
                   color={ramBarColor}
-                  caption={rTotal > 0 ? `${fmtStorage(rUsed, false)} / ${fmtStorage(rTotal, true)}` : "—"}
+                  caption={
+                    rTotal > 0
+                      ? shareMode
+                        ? `${rPct}% used`
+                        : `${fmtStorage(rUsed, false)} / ${fmtStorage(rTotal, true)}`
+                      : "—"
+                  }
                 />
               );
             })()}
@@ -358,7 +379,7 @@ function SparkCard({
                 return (
                   <MiniStat
                     label="Storage"
-                    value={`${fmtStorage(rootDisk.used, false)} / ${fmtStorage(rootDisk.total, true)}`}
+                    value={shareMode ? `${rootDisk.percentage}%` : `${fmtStorage(rootDisk.used, false)} / ${fmtStorage(rootDisk.total, true)}`}
                     tone={rootDisk.percentage > 85 ? "danger" : rootDisk.percentage > 60 ? "warning" : "default"}
                     bold={false}
                   />
@@ -374,10 +395,16 @@ function SparkCard({
               // mirror > generic fallback. Derived never shows a stale model:
               // the backend nulls it when the head is unresolvable/offline.
               if (role === "worker") {
-                const label =
-                  spark.workerLabel?.trim() || spark.workerDerivedLabel?.trim() || "distributed";
-                const title = headSparkName
-                  ? `${label} · worker of ${headSparkName}`
+                const label = shareMode
+                  ? "distributed"
+                  : spark.workerLabel?.trim() || spark.workerDerivedLabel?.trim() || "distributed";
+                const headName = shareMode
+                  ? spark.workerHeadId
+                    ? aliasForNode(spark.workerHeadId)
+                    : null
+                  : headSparkName;
+                const title = headName
+                  ? `${label} · worker of ${headName}`
                   : `${label} · distributed LLM worker`;
                 return (
                   <MiniStat
@@ -411,9 +438,9 @@ function SparkCard({
                               ? "q27"
                               : llm.backend ?? "LLM"
                   }
-                  value={llm.modelId ?? "unknown"}
+                  value={displayModel(llm.modelId)}
                   tone="accent"
-                  title={llm.modelId ?? undefined}
+                  title={displayModel(llm.modelId)}
                   wrap
                 />
               );
@@ -474,9 +501,9 @@ function SparkCard({
                   <div className="flex items-center gap-2">
                     <span
                       className="min-w-0 truncate text-[14px] font-semibold text-text"
-                      title={llm.modelId ?? undefined}
+                      title={displayModel(llm.modelId)}
                     >
-                      {backendLabel}: {llm.modelId ?? "unknown"}
+                      {backendLabel}: {displayModel(llm.modelId)}
                     </span>
                   </div>
                   <div className="mt-3 flex flex-col gap-3">
@@ -533,6 +560,7 @@ export function OverviewPage({
   onSelectSpark,
   variant = "overview",
 }: OverviewPageProps) {
+  const shareMode = useShareMode();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "online" | "offline" | "issues">("all");
   const withoutWorkers = hideWorkers ? sparks.filter((s) => !isWorkerSpark(s)) : sparks;
@@ -743,7 +771,7 @@ export function OverviewPage({
               </div>
             </div>
           )}
-          {sparks.length > 0 && (
+          {sparks.length > 0 && !shareMode && (
             <div className="flex flex-wrap items-center justify-end gap-1.5">
               {hermesMonitoredCount > 0 && (
                 <button

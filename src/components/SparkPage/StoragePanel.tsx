@@ -3,6 +3,7 @@ import type { StorageMetrics } from "../../api/types";
 import { updateDisabledDevices, refreshSparkMetric, updateSpark } from "../../api/client";
 import { Panel } from "../ui/Panel";
 import { DiskIcon, GearIcon, RotateIcon } from "../ui/icons";
+import { useShareMode } from "../../hooks/shareMode";
 
 interface StoragePanelProps {
   storage: StorageMetrics[];
@@ -113,6 +114,7 @@ export function StoragePanel({
   const [showSettings, setShowSettings] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const shareMode = useShareMode();
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -165,12 +167,14 @@ export function StoragePanel({
             <RotateIcon className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
             <span>{refreshing ? "Refreshing…" : "Refresh"}</span>
           </button>
-          <SettingsButton
-            active={showSettings}
-            onClick={() => setShowSettings(!showSettings)}
-            disabled={saving}
-            label="Storage"
-          />
+          {!shareMode && (
+            <SettingsButton
+              active={showSettings}
+              onClick={() => setShowSettings(!showSettings)}
+              disabled={saving}
+              label="Storage"
+            />
+          )}
         </div>
       }
     >
@@ -230,19 +234,21 @@ export function StoragePanel({
                   <div key={`${disk.device}:${disk.label}`} className="space-y-1.5">
                     <div className="flex items-baseline justify-between">
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="truncate text-xs text-text">{disk.label}</span>
+                        <span className="truncate text-xs text-text">{shareMode ? "disk" : disk.label}</span>
                         <TierBadge tier={disk.tier} />
-                        <span className="shrink-0 font-tabular text-xs text-muted">{disk.device}</span>
+                        {!shareMode && (
+                          <span className="shrink-0 font-tabular text-xs text-muted">{disk.device}</span>
+                        )}
                       </div>
                       <span className="shrink-0 font-tabular text-xs text-text-strong">{pct}%</span>
                     </div>
                     <MetricBar value={disk.used} max={disk.total} />
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-tabular text-muted">
-                        {formatGb(disk.used)} / {formatGb(disk.total)}
+                        {shareMode ? `${pct}% used` : `${formatGb(disk.used)} / ${formatGb(disk.total)}`}
                       </span>
                       <span className="font-tabular text-muted">
-                        {formatGb(disk.available)} free
+                        {shareMode ? `${100 - pct}% free` : `${formatGb(disk.available)} free`}
                       </span>
                     </div>
                     <div className="flex items-center justify-end gap-3 text-[10px]">

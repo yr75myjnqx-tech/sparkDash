@@ -22,6 +22,7 @@ import type { SparkSnapshot } from "../api/types";
 import { PlusIcon, GridIcon, DiskIcon, GaugeIcon } from "./ui/icons";
 import { OVERVIEW_ID, FLEET_STORAGE_ID, GAUGES_ID } from "../constants";
 import { displayNodeName } from "../config/display.js";
+import { aliasForNode, useShareMode } from "../hooks/shareMode";
 
 interface SparkTabsProps {
   sparks: SparkSnapshot[];
@@ -162,6 +163,9 @@ function TabChrome({
   isDragging?: boolean;
   isOverlay?: boolean;
 }) {
+  // Share-safe mode (§5.8): tab labels alias the hostname.
+  const shareMode = useShareMode();
+  const label = shareMode ? aliasForNode(spark.id) : spark.name;
   return (
     <div
       className={[
@@ -177,14 +181,14 @@ function TabChrome({
         type="button"
         className="pill-handle"
         title="Drag to reorder"
-        aria-label={`Reorder ${spark.name}`}
+        aria-label={`Reorder ${label}`}
         {...dragHandleProps}
       >
         <GripIcon />
       </button>
       <TabLabelButton
         id={spark.id}
-        name={spark.name}
+        name={label}
         online={spark.online}
         isActive={isActive}
         onSelect={onSelect}
@@ -492,6 +496,7 @@ function MobileSparkMenu({
   onClose: () => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const shareMode = useShareMode();
 
   const handleItemClick = useCallback(
     (id: string) => {
@@ -578,7 +583,7 @@ function MobileSparkMenu({
               spark.online ? "bg-success" : "bg-danger"
             }`}
           />
-          {displayNodeName(spark.name)}
+          {shareMode ? aliasForNode(spark.id) : displayNodeName(spark.name)}
         </button>
       ))}
       <button

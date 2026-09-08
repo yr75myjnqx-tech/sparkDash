@@ -5,6 +5,7 @@ import { MemoryIcon } from "../ui/icons";
 import { MetricBar } from "../ui/MetricBar";
 import { DISPLAY } from "../../config/display.js";
 import { useMetricsHistoryTail } from "../../hooks/metricsStore";
+import { useShareMode } from "../../hooks/shareMode";
 
 interface RamPanelProps {
   ram: RamMetrics | null;
@@ -29,6 +30,7 @@ function celsiusToFahrenheit(c: number): number {
  * here for hosts; Spark pages show it on the GPU panel.
  */
 export function RamPanel({ ram, cpu, sparkId, temperatureUnit, className }: RamPanelProps) {
+  const shareMode = useShareMode();
   const history = useMetricsHistoryTail(sparkId, "ram.percentage");
   const tempHistory = useMetricsHistoryTail(sparkId, "cpu.temp");
   const used = ram?.used ?? 0;
@@ -57,9 +59,11 @@ export function RamPanel({ ram, cpu, sparkId, temperatureUnit, className }: RamP
             value={used}
             max={total}
             caption={
-              total > 0
-                ? `${formatMb(used).replace(/ (GB|MB)$/, "")} / ${formatMb(total)}`
-                : "—"
+              shareMode
+                ? `${percentage}%`
+                : total > 0
+                  ? `${formatMb(used).replace(/ (GB|MB)$/, "")} / ${formatMb(total)}`
+                  : "—"
             }
           />
           {history.length > 0 && (

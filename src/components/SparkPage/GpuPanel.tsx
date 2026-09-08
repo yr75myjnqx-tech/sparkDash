@@ -6,6 +6,7 @@ import { ActivityIcon } from "../ui/icons";
 import { MetricBar } from "../ui/MetricBar";
 import { DISPLAY } from "../../config/display.js";
 import { useMetricsHistoryTail } from "../../hooks/metricsStore";
+import { useShareMode } from "../../hooks/shareMode";
 
 interface GpuPanelProps {
   gpu: GpuMetrics | null;
@@ -68,6 +69,7 @@ function MetricRow({
 }
 
 export function GpuPanel({ gpu, cpu, unifiedMemory, sparkId, temperatureUnit, className }: GpuPanelProps) {
+  const shareMode = useShareMode();
   const tempHistory = useMetricsHistoryTail(sparkId, "gpu.temp");
   const usageHistory = useMetricsHistoryTail(sparkId, "gpu.usage");
   const cpuTempHistory = useMetricsHistoryTail(sparkId, "cpu.temp");
@@ -241,12 +243,12 @@ export function GpuPanel({ gpu, cpu, unifiedMemory, sparkId, temperatureUnit, cl
                 label="VRAM"
                 value={vramUsed}
                 max={vramTotal}
-                caption={vramTotal > 0 ? `${formatMb(vramUsed).replace(/ (GB|MB)$/, "")} / ${formatMb(vramTotal)}` : "—"}
+                caption={shareMode ? `${vramPct}%` : vramTotal > 0 ? `${formatMb(vramUsed).replace(/ (GB|MB)$/, "")} / ${formatMb(vramTotal)}` : "—"}
               />
               {gpu.vram.available > 0 && (
                 <div className="flex justify-between text-xs">
                   <span className="text-muted">Available</span>
-                  <span className="font-tabular text-text">{formatMb(gpu.vram.available)}</span>
+                  <span className="font-tabular text-text">{shareMode ? "—" : formatMb(gpu.vram.available)}</span>
                 </div>
               )}
               {unifiedMemory !== null && (
@@ -276,7 +278,7 @@ export function GpuPanel({ gpu, cpu, unifiedMemory, sparkId, temperatureUnit, cl
             <div className="flex justify-between text-xs">
               <span className="text-muted">VRAM</span>
               <span className="font-tabular text-text">
-                {vramUsed > 0 ? `${formatMb(vramUsed)} used` : "—"}
+                {vramUsed > 0 ? (shareMode ? `${vramPct}%` : `${formatMb(vramUsed)} used`) : "—"}
               </span>
             </div>
           )}

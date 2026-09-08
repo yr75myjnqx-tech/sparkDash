@@ -4,6 +4,7 @@ import { MetricBar } from "../ui/MetricBar";
 import { Panel } from "../ui/Panel";
 import { DiskIcon } from "../ui/icons";
 import { resolvePlacement, rollupTierGb } from "./fleetPlacement";
+import { useShareMode, aliasForNode, aliasForModel } from "../../hooks/shareMode";
 
 interface FleetStoragePageProps {
   sparks: SparkSnapshot[];
@@ -41,6 +42,7 @@ function TierChip({ tier }: { tier: ModelTier }) {
 }
 
 export function FleetStoragePage({ sparks }: FleetStoragePageProps) {
+  const shareMode = useShareMode();
   const tierGb = useMemo(() => rollupTierGb(sparks), [sparks]);
   const placement = useMemo(() => resolvePlacement(sparks), [sparks]);
   const replicated = placement.filter((p) => p.resident.length > 1).length;
@@ -59,8 +61,14 @@ export function FleetStoragePage({ sparks }: FleetStoragePageProps) {
           {TIERS.map((t) => (
             <span key={t} className="flex items-center gap-1.5 rounded-md border border-border bg-surface-elevated px-2.5 py-1.5 text-[11px] text-muted">
               <TierChip tier={t} />
-              <span className="font-tabular text-text-strong">{fmtGb(tierGb[t])}</span>
-              <span>used</span>
+              {/* Share mode (§5.8): capacity totals never render — the tier
+                  chip alone says which tiers are in use. */}
+              {!shareMode && (
+                <>
+                  <span className="font-tabular text-text-strong">{fmtGb(tierGb[t])}</span>
+                  <span>used</span>
+                </>
+              )}
             </span>
           ))}
           <span className="flex items-center gap-1.5 rounded-md border border-border bg-surface-elevated px-2.5 py-1.5 text-[11px] text-muted">
@@ -98,7 +106,9 @@ export function FleetStoragePage({ sparks }: FleetStoragePageProps) {
               {placement.map((p) => (
                 <tr key={p.name} className="border-t border-border">
                   <td className="py-2 pr-3 align-top">
-                    <span className="font-tabular break-all text-text-strong">{p.name}</span>
+                    <span className="font-tabular break-all text-text-strong">
+                      {shareMode ? aliasForModel(p.name) : p.name}
+                    </span>
                   </td>
                   <td className="py-2 pr-3 align-top font-tabular text-muted">
                     {fmtBytes(p.resident[0]?.tier ? byteSizeFor(p, sparks) : 0)}
@@ -107,13 +117,13 @@ export function FleetStoragePage({ sparks }: FleetStoragePageProps) {
                     <div className="flex flex-wrap gap-1">
                       {p.resident.map((r) => (
                         <span key={`${r.sparkId}:${r.tier}`} className="inline-flex items-center gap-1 rounded bg-surface-elevated px-1.5 py-0.5 text-[10px] text-text">
-                          {r.sparkName}
+                          {shareMode ? aliasForNode(r.sparkId) : r.sparkName}
                           <TierChip tier={r.tier} />
                         </span>
                       ))}
                       {p.fabric.map((f) => (
                         <span key={f.sparkId} className="inline-flex items-center gap-1 rounded border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
-                          {f.sparkName} · fabric
+                          {shareMode ? aliasForNode(f.sparkId) : f.sparkName} · fabric
                         </span>
                       ))}
                     </div>
@@ -145,6 +155,7 @@ function byteSizeFor(
 }
 
 function SparkTierCard({ spark }: { spark: SparkSnapshot }) {
+  const shareMode = useShareMode();
   const disks: StorageMetrics[] = Array.isArray(spark.metrics?.storage)
     ? spark.metrics.storage.filter((d) => !d.disabled)
     : [];
@@ -167,7 +178,9 @@ function SparkTierCard({ spark }: { spark: SparkSnapshot }) {
     >
       <div className="flex items-center gap-2">
         <span className={`h-2 w-2 shrink-0 rounded-full ${spark.online ? "bg-success dot-glow-success" : "bg-danger"}`} />
-        <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-text-strong">{spark.name}</span>
+        <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-text-strong">
+          {shareMode ? aliasForNode(spark.id) : spark.name}
+        </span>
         <span className="text-[10px] uppercase tracking-wide text-muted">{spark.online ? "online" : "offline"}</span>
       </div>
       <div className="flex flex-col gap-3">
@@ -179,7 +192,9 @@ function SparkTierCard({ spark }: { spark: SparkSnapshot }) {
                   <TierChip tier={t} />
                 </span>
                 <span className="font-tabular text-muted">
-                  {fmtGb(tierAgg[t].used)} / {fmtGb(tierAgg[t].total)}
+                  {shareMode
+                    ? `${tierAgg[t].total > 0 ? Math.min(100, Math.round((tierAgg[t].used / tierAgg[t].total) * 100)) : 0}%`
+                    : `${fmtGb(tierAgg[t].used)} / ${fmtGb(tierAgg[t].total)}`}
                 </span>
               </div>
               <MetricBar label={t} value={tierAgg[t].used} max={tierAgg[t].total} />
