@@ -50,7 +50,6 @@ function MiniStat({
   bold = true,
   title,
   wrap = false,
-  inline = false,
 }: {
   label: string;
   value: string;
@@ -59,8 +58,6 @@ function MiniStat({
   title?: string;
   /** Allow value to wrap (no ellipsis trim) — used for long model ids. */
   wrap?: boolean;
-  /** Render "label value" on a single line (value truncated, tooltip full). */
-  inline?: boolean;
 }) {
   const toneClass =
     tone === "danger"
@@ -72,19 +69,6 @@ function MiniStat({
           : tone === "success"
             ? "text-success"
             : "text-text";
-  if (inline) {
-    return (
-      <div className="flex min-w-0 items-baseline gap-1.5">
-        <span className="shrink-0 text-[10px] tracking-wide text-muted">{label}</span>
-        <span
-          className={`truncate font-tabular text-[13px] ${bold ? "font-semibold" : ""} ${toneClass}`}
-          title={title}
-        >
-          {value}
-        </span>
-      </div>
-    );
-  }
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className="text-[10px] tracking-wide text-muted">{label}</span>
@@ -170,7 +154,7 @@ function SparkCard({
 
   return (
     <div
-      className="overview-card flex flex-col"
+      className="overview-card flex h-full flex-col"
       style={{
         padding: "var(--density-card-pad)",
         gap: "var(--density-card-gap)",
@@ -439,26 +423,10 @@ function SparkCard({
               // mirror > generic fallback. Derived never shows a stale model:
               // the backend nulls it when the head is unresolvable/offline.
               if (role === "worker") {
-                const label = shareMode
-                  ? "distributed"
-                  : spark.workerLabel?.trim() || spark.workerDerivedLabel?.trim() || "distributed";
-                const headName = shareMode
-                  ? spark.workerHeadId
-                    ? aliasForNode(spark.workerHeadId)
-                    : null
-                  : headSparkName;
-                const title = headName
-                  ? `${label} · worker of ${headName}`
-                  : `${label} · distributed LLM worker`;
-                return (
-                  <MiniStat
-                    label="Worker:"
-                    value={label}
-                    tone="accent"
-                    title={title}
-                    inline
-                  />
-                );
+                // Worker model/head identity is carried by the workload
+                // section below ("CLUSTER WORKER — metrics served by …");
+                // no secondary-stat row here keeps every card the same height.
+                return null;
               }
 
               // Head / Standalone: same as before — live backend + model id.
