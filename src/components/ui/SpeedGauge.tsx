@@ -121,17 +121,16 @@ export function SpeedGauge({ label, value, max, fallbackScale = false }: SpeedGa
         className="block h-auto w-full"
         aria-hidden="true"
       >
-        {/* outer scale segments, alternating neutral shading — border-strong so
-            the dial structure reads in both themes (border alone vanishes on
-            the dark surface). */}
+        {/* outer scale segments, alternating accent shading — matches the
+            sparkline colour language (accent = neutral data). */}
         {segs.map((i) => (
           <path
             key={i}
             d={annularSector(i / SEGMENTS + 0.012, (i + 1) / SEGMENTS - 0.012, R_OUTER, R_OUTER - 9)}
-            fill={i % 2 === 0 ? "var(--color-border-strong)" : "var(--color-surface-hover)"}
+            fill="var(--color-accent)"
             stroke="var(--color-border-strong)"
             strokeWidth={0.4}
-            opacity={i % 2 === 0 ? 0.9 : 1}
+            opacity={i % 2 === 0 ? 0.9 : 0.35}
           />
         ))}
         {/* major tick marks at the labelled fractions — give the dial visible
