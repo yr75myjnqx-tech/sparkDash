@@ -468,7 +468,32 @@ function SparkCard({
 
           {(() => {
             const role = resolveSparkRole(spark);
-            if (role === "worker") return null;
+            // Addendum D.2: a TP worker holding VRAM with no local API is not
+            // "no workload" — it is running the model, with telemetry served
+            // by the head. Distinct third state, never NO WORKLOAD MONITORED
+            // and never an empty card (AT-18).
+            if (role === "worker") {
+              const headName = shareMode
+                ? spark.workerHeadId
+                  ? aliasForNode(spark.workerHeadId)
+                  : null
+                : headSparkName
+                  ? displayNodeName(headSparkName)
+                  : null;
+              const hint =
+                "This node runs model shards with no local API; its workload telemetry is reported by the cluster head.";
+              return (
+                <div className="mt-3.5 border-t border-border pt-3">
+                  <p className="text-[11px] uppercase tracking-wide text-muted" title={hint}>
+                    {headName
+                      ? `CLUSTER WORKER — metrics served by ${headName} (head)`
+                      : "CLUSTER WORKER — metrics served by the cluster head"}
+                    <span aria-hidden="true" className="ml-1 cursor-help text-[10px]">?</span>
+                    <span className="sr-only"> {hint}</span>
+                  </p>
+                </div>
+              );
+            }
             const llmArr = spark.metrics.llm;
             const llm = Array.isArray(llmArr) ? llmArr.find((l) => l.available) : null;
             // Section skeleton / empty states (§5.4, I-4): the workload

@@ -147,8 +147,10 @@ export function ServingLanes({ llm, maxNumSeqs }: ServingLanesProps) {
       </div>
 
       {/* Est. wait: queue_depth × mean decode time of completed requests
-          (vLLM exposes no per-request live waits without a gateway). Row is
-          always visible; "—" until the queue backs up. */}
+          (vLLM exposes no per-request live waits without a gateway).
+          Warning chrome only when a real estimate renders — the "—" state is
+          neutral, not a warning (I-3/I-4, Addendum C.7). The tooltip states
+          the basis: lifetime-mean is forbidden, this is the last 15 m. */}
       {(() => {
         const estWaitSec =
           waiting > 0 && llm.avgDecodeSeconds != null
@@ -160,14 +162,24 @@ export function ServingLanes({ llm, maxNumSeqs }: ServingLanesProps) {
             : estWaitSec < 10
               ? `~${estWaitSec.toFixed(1)}s`
               : `~${Math.round(estWaitSec)}s`;
+        const live = estWaitSec != null;
         return (
-          <div className="flex items-center justify-between rounded-md border border-warning/20 bg-warning/5 px-2 py-1.5">
+          <div
+            className={`flex items-center justify-between rounded-md border px-2 py-1.5 ${
+              live ? "border-warning/20 bg-warning/5" : "border-border bg-surface-elevated"
+            }`}
+            title={
+              live
+                ? `queue depth × mean decode of completed requests, last ${DISPLAY.AGG_WINDOW_S / 60} m`
+                : "queue depth × mean decode of completed requests — no completions in the window"
+            }
+          >
             <span className="text-[10px] uppercase tracking-wide text-muted">
               Est. Wait
             </span>
             <span
               className={`font-tabular text-xs ${
-                estWaitSec != null ? "text-warning" : "text-muted"
+                live ? "text-warning" : "text-muted"
               }`}
             >
               {estWait}

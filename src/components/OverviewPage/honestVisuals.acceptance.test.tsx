@@ -257,6 +257,55 @@ describe("AT-11 accessibility (I-6)", () => {
   });
 });
 
+describe("AT-18 topology honesty (Addendum D.2/D.3)", () => {
+  it("a configured TP worker renders CLUSTER WORKER — never NO WORKLOAD MONITORED", () => {
+    const head = makeNode("at18-head", { role: "head", name: "gx10" }, [
+      makeLlm({ modelId: "deepseek-v4-flash-vision-exp" }),
+    ]);
+    const worker = makeNode(
+      "at18-worker",
+      { role: "worker", workerHeadId: "at18-head", name: "gx11" } as Partial<SparkSnapshot>,
+      []
+    );
+    const standalone = makeNode("at18-solo", { role: "standalone", name: "gx12" }, [
+      makeLlm({ modelId: "ornith-1.5-35b" }),
+    ]);
+
+    const { container } = render(
+      <OverviewPage sparks={[head, worker, standalone]} variant="gauges" />
+    );
+    const rendered = cards(container);
+    expect(rendered).toHaveLength(3);
+
+    const headCard = rendered[0];
+    const workerCard = rendered[1];
+    const soloCard = rendered[2];
+
+    // Role badges match the configured topology (3/3) — never two
+    // standalones for a TP pair (defect 12).
+    expect(headCard.textContent).toContain("Head");
+    expect(workerCard.textContent).toContain("Worker");
+    expect(soloCard.textContent).toContain("Standalone");
+
+    // The worker's workload block is the distinct CLUSTER WORKER state…
+    expect(workerCard.textContent).toContain("CLUSTER WORKER — metrics served by");
+    expect(workerCard.textContent).toContain("(head)");
+    // …never the "no workload" lie, and never a NO DATA placeholder.
+    expect(workerCard.textContent).not.toContain("NO WORKLOAD MONITORED");
+    expect(workerCard.textContent).not.toContain("NO DATA — exporter not reporting");
+    // Head name normalised to the Operator's convention (AT-15).
+    expect(workerCard.textContent).toContain("GX10");
+
+    // Exactly one CLUSTER WORKER card in the fleet; the head still carries
+    // its own gauges (the cluster is not double-counted as a workload).
+    const clusterWorkers = rendered.filter((c) =>
+      (c.textContent ?? "").includes("CLUSTER WORKER")
+    );
+    expect(clusterWorkers).toHaveLength(1);
+    expect(gaugeSvgs(headCard)).toHaveLength(2);
+  });
+});
+
 describe("AT-12 injection (T2, display half)", () => {
   it("a hostile modelId renders as inert text — no img node, no script execution", () => {
     const payload = "<img src=x onerror=window.__pwned=1>";

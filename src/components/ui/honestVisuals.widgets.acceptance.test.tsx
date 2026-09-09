@@ -135,6 +135,40 @@ describe("AT-7 aggregate windows are labelled (§5.5)", () => {
   });
 });
 
+describe("C.7 Est. Wait chrome (I-3/I-4)", () => {
+  it("warning tint only when a real estimate renders; '—' is neutral chrome", () => {
+    const live = render(
+      <ServingLanes
+        llm={makeLlm({ requestsRunning: 4, requestsWaiting: 2, avgDecodeSeconds: 3 })}
+        maxNumSeqs={6}
+      />
+    );
+    const liveLabel = [...live.container.querySelectorAll("span")].find(
+      (s) => s.textContent === "Est. Wait"
+    );
+    const liveRow = liveLabel?.parentElement as HTMLElement;
+    expect(liveRow.className).toContain("border-warning/20");
+    expect(liveRow.className).toContain("bg-warning/5");
+    expect(liveRow.textContent).toContain("~6.0s"); // 2 waiting × 3 s decode
+    expect(liveRow.title).toContain("queue depth × mean decode of completed requests, last 15 m");
+
+    const dead = render(
+      <ServingLanes
+        llm={makeLlm({ requestsRunning: 4, requestsWaiting: 0, avgDecodeSeconds: null })}
+        maxNumSeqs={6}
+      />
+    );
+    const deadLabel = [...dead.container.querySelectorAll("span")].find(
+      (s) => s.textContent === "Est. Wait"
+    );
+    const deadRow = deadLabel?.parentElement as HTMLElement;
+    expect(deadRow.className).not.toContain("border-warning");
+    expect(deadRow.className).not.toContain("bg-warning");
+    expect(deadRow.className).toContain("border-border");
+    expect(deadRow.textContent).toContain("—");
+  });
+});
+
 describe("AT-8 precision (§5.7)", () => {
   it("latency aggregates render at 1 decimal — never 2+", () => {
     // ServingLanes renders seconds ≥ 1 through the same 1-decimal rule.

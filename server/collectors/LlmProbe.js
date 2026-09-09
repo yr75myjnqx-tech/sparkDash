@@ -10,6 +10,13 @@ import { llmProbeHost } from "./llmHost.js";
 
 const FAIL_RESET_THRESHOLD = 3;
 const REDETECT_INTERVAL_MS = 60_000;
+/**
+ * Rolling window for avgDecodeSeconds (Addendum C.7): mean decode time is
+ * computed from histogram sum/count DELTAS over this window, never lifetime
+ * totals. Mirrors the frontend AGG_WINDOW_S (900 s, labelled "15m") in
+ * src/config/display.js — keep the two in sync.
+ */
+const DECODE_AVG_WINDOW_MS = 15 * 60 * 1000;
 /** Current SGLang names first. Deprecated aliases still work but log a warning per hit. */
 const SGLANG_SERVER_INFO_PATHS = ["/server_info", "/get_server_info"];
 const SGLANG_MODEL_INFO_PATHS = ["/model_info", "/get_model_info"];
@@ -116,6 +123,9 @@ export class LlmProbe {
     this.e2eP95Seconds = null;
     /** Mean decode (generation) time per completed request (seconds). */
     this.avgDecodeSeconds = null;
+    /** Rolling {at, sum, count} samples of the cumulative decode histogram
+     * for the windowed avgDecodeSeconds (Addendum C.7). */
+    this._decodeWindow = [];
     /** Inter-token latency p95 (seconds). */
     this.itlP95Seconds = null;
     /** Speculative/MTP acceptance rate 0–1 (accepted/drafted). */
@@ -261,6 +271,7 @@ export class LlmProbe {
     this.lastTtftSum = null;
     this.lastTtftCount = null;
     this.lastIterSum = null;
+    this._decodeWindow = [];
     this._sglangStickyTps = null;
   }
 
@@ -660,6 +671,7 @@ export class LlmProbe {
     this.preemptionsTotal = null;
     this.e2eP95Seconds = null;
     this.avgDecodeSeconds = null;
+    this._decodeWindow = [];
     this.itlP95Seconds = null;
   }
 
@@ -789,6 +801,7 @@ export class LlmProbe {
     this.prefixCacheHitRate = null;
     this.e2eP95Seconds = null;
     this.avgDecodeSeconds = null;
+    this._decodeWindow = [];
     this.itlP95Seconds = null;
     this.mtpAcceptanceRate = null;
     this.cachedPrefillTps = null;
@@ -900,14 +913,18 @@ export class LlmProbe {
     const e2eP95 = this._histogramQuantile(e2eHist.buckets, e2eHist.total, 0.95);
     this.e2eP95Seconds = e2eP95 == null ? null : Math.round(e2eP95 * 1000) / 1000;
 
-    // Mean decode time per completed request — used by the serving lanes
-    // widget to estimate queue wait (queue_depth × avg decode).
-    const decodeHist = this._parseVllmHistogram(txt, "vllm:request_decode_time_seconds");
+    // Mean decode time per completed request over the last DECODE_AVG_WINDOW_MS
+    // (15 m), from cumulative-histogram sum/count deltas — the same delta
+    // pattern as ttftSeconds, but held in a rolling window. Lifetime sum÷count
+    // was a window violation (I-5, Addendum C.7): one old slow request skewed
+    // the queue-wait estimate forever. null when the window has no completions.
     const decodeSum = this._getVllmMetric(txt, "request_decode_time_seconds_sum");
-    this.avgDecodeSeconds =
-      decodeSum != null && decodeHist.total != null && decodeHist.total > 0
-        ? Math.round((decodeSum / decodeHist.total) * 1000) / 1000
-        : null;
+    const decodeCount = this._getVllmMetric(txt, "request_decode_time_seconds_count");
+    if (decodeSum != null && decodeCount != null) {
+      this.avgDecodeSeconds = this._updateDecodeWindow(decodeSum, decodeCount, Date.now());
+    } else {
+      this.avgDecodeSeconds = null;
+    }
 
     const itlHist = this._parseVllmHistogram(txt, "vllm:inter_token_latency_seconds");
     const itlP95 = this._histogramQuantile(itlHist.buckets, itlHist.total, 0.95);
@@ -1431,6 +1448,34 @@ export class LlmProbe {
   _parseVllmHistogram(body, metricPrefix) {
     const name = metricPrefix.replace(/^vllm:/, "");
     return this._parseHistogram(body, metricPrefix, `vllm:${name}_count`);
+  }
+
+  /**
+   * Rolling window for avgDecodeSeconds (Addendum C.7). Push a cumulative
+   * {sum, count} sample and return the mean decode over the samples still
+   * inside DECODE_AVG_WINDOW_MS, or null when the window has no completions.
+   * Counter resets (sum/count going backwards) yield null, never a negative
+   * or absurd mean. `now` is injectable for tests.
+   * @param {number} sum cumulative request_decode_time_seconds_sum
+   * @param {number} count cumulative request_decode_time_seconds_count
+   * @param {number} now ms epoch
+   * @returns {number | null}
+   */
+  _updateDecodeWindow(sum, count, now) {
+    this._decodeWindow.push({ at: now, sum, count });
+    const cutoff = now - DECODE_AVG_WINDOW_MS;
+    // Prune only while the SECOND-oldest sample is also outside the window,
+    // so the oldest remaining sample stays as the delta baseline straddling
+    // the cutoff — otherwise a lone in-window sample has no baseline and the
+    // whole window reports null.
+    while (this._decodeWindow.length > 1 && this._decodeWindow[1].at < cutoff) {
+      this._decodeWindow.shift();
+    }
+    const oldest = this._decodeWindow[0];
+    const deltaSum = sum - oldest.sum;
+    const deltaCount = count - oldest.count;
+    if (deltaCount <= 0 || deltaSum < 0) return null;
+    return Math.round((deltaSum / deltaCount) * 1000) / 1000;
   }
 
   /**
