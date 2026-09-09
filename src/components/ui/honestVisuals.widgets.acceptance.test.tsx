@@ -36,27 +36,30 @@ function makeLlm(overrides: Partial<LlmMetrics> = {}): LlmMetrics {
   };
 }
 
-describe("AT-3 idle state (§5.2)", () => {
+describe("AT-3 zero is a value, not a state (Addendum E)", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it("value 0 for ≥ IDLE_AFTER_S dims the dial, overlays 'idle', keeps zero coloured zones", () => {
+  it("value 0 renders at full opacity — no idle dimming, no 'idle' overlay, zero coloured zones", () => {
     vi.useFakeTimers();
     const { container, root } = render(<SpeedGauge label="Generation" value={0} max={500} />);
 
-    // Before any rAF frame the dial is live…
+    // Before any rAF frame…
     expect(container.textContent).not.toContain("idle");
+    let wrapper = container.firstElementChild as HTMLElement;
+    expect(wrapper.className).not.toContain("opacity-40");
 
-    // …after advancing past IDLE_AFTER_S the idle overlay appears (§5.2).
+    // …and after any amount of idle time: full opacity (Operator decision,
+    // Addendum E — the needle at 0 is the signal, greying out hid it).
     act(() => {
       vi.advanceTimersByTime(DISPLAY.IDLE_AFTER_S * 1000 + 1000);
     });
-    expect(container.textContent).toContain("idle");
-    const wrapper = container.firstElementChild as HTMLElement;
-    expect(wrapper.className).toContain("opacity-40");
+    expect(container.textContent).not.toContain("idle");
+    wrapper = container.firstElementChild as HTMLElement;
+    expect(wrapper.className).not.toContain("opacity-40");
 
-    // No coloured zone arcs anywhere on the dial (segments + arc are neutral).
+    // No coloured zone arcs anywhere on the dial (segments are neutral).
     expect(
       container.querySelectorAll(
         'path[fill="var(--color-success)"], path[fill="var(--color-danger)"], path[fill="var(--color-warning)"]'

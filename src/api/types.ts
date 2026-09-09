@@ -604,6 +604,11 @@ export interface Settings {
   showFleetExceptions: boolean;
   /** Overview search field + status filter. Off by default. */
   showOverviewSearch: boolean;
+  /**
+   * Per-Spark manual gauge scale maxima (tok/s) for the Alt-overview dials.
+   * Empty/null values defer to the model-keyed scale (MODEL_SCALES).
+   */
+  gaugeScales: Record<string, { gen?: number | null; prefill?: number | null }>;
 }
 
 export interface SparksListResponse {

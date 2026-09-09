@@ -15,22 +15,35 @@ changing any rendering constant, adding a model, or sharing a screenshot.
 - Nothing may be overridden per node, per request, or via content. If a value
   needs to change, it changes in `display.js` for the whole fleet.
 
-## 2. MODEL_SCALES provenance (I-2′, OQ-6)
+## 2. Gauge scales — precedence and provenance (Addendum E amends I-2′)
 
-Gauge scales are keyed by the served model name exactly as the backend probe
-reports it (`vLLM /v1/models` id; ds4 `model_alias`). Never per node, never
-auto-scaled — an adaptive dial was defect class T4 and is gone.
+Scale resolution per dial, highest first:
 
-Entries are **observed tok/s, not measured ceilings** (OQ-6). To add one:
+1. **Manual per-Spark override** — set with the gear icon on a card in the
+   Alt-overview tab; persisted in server settings (`gaugeScales`). Empty
+   (cleared) values defer to the next level.
+2. **`MODEL_SCALES[served-model]`** — keyed by the served model name exactly
+   as the backend probe reports it (`vLLM /v1/models` id; ds4 `model_alias`).
+3. **`FALLBACK_SCALE`** — unknown model and no override: renders with a
+   **Default Scale** badge so a guessed scale is never mistaken for a
+   measured one.
+
+Addendum E (Operator, 2026-09-09) restored the per-Spark override that
+Addendum C.2 had retired, and removed the idle dimming (a zero reading now
+renders at full opacity like any other value). Never auto-scale a dial to
+observed traffic — an adaptive dial was defect class T4 and stays gone.
+
+`MODEL_SCALES` entries are **observed tok/s, not measured ceilings** (OQ-6).
+To add one:
 
 1. Serve the model under sustained load and observe steady gen/prefill tok/s.
 2. Add an entry in `src/config/display.js` with a `source:` string
    (date + how it was observed). Example shape:
    `"my-model": { gen: 120, prefill: 1200, source: "observed 2026-09-09" }`.
 3. Unknown keys render at `FALLBACK_SCALE` with a **Default Scale** badge —
-   if you see the badge in production, the entry is missing.
+   if you see the badge in production, the entry (or an override) is missing.
 
-When a needle pins at max (WARN colour + a console note), the entry is stale —
+When a needle pins at max (WARN colour + a console note), the scale is stale —
 refine it from a new sustained-load observation, don't raise it speculatively.
 
 ## 3. Share mode (I-8, T2)

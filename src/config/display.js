@@ -43,10 +43,13 @@ export const DISPLAY = {
 };
 
 /**
- * Gauge scales are model-specific (Addendum A, invariant I-2′). Key: served
- * model name exactly as the backend probe reports it (vLLM /v1/models id;
- * ds4 model_alias/model_path). Never per node, never auto-scaled.
- * Adding or changing an entry is a code edit with a `source:` string.
+ * Gauge scales are model-specific (Addendum A) with a manual per-Spark
+ * override layered on top (Addendum E — Operator decision, supersedes the
+ * per-node prohibition of I-2′/C.2). Key: served model name exactly as the
+ * backend probe reports it (vLLM /v1/models id; ds4 model_alias/model_path).
+ * Never auto-scaled. Adding or changing a table entry is a code edit with a
+ * `source:` string; per-Spark overrides live in server settings gaugeScales
+ * and are edited from the Alt-overview gear popover.
  */
 export const MODEL_SCALES = {
   "ornith-1.5-35b": {

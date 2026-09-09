@@ -77,11 +77,12 @@ function fmtScale(n: number): string {
   return n >= 100 ? n.toFixed(0) : n.toFixed(1).replace(/\.0$/, "");
 }
 
-/** Expected scale labels for both gauges of a model, derived from MODEL_SCALES. */
+/** Expected scale labels for both gauges of a model, derived from MODEL_SCALES.
+ *  DOM order: the Prefill dial renders left of the Generation dial. */
 function expectedGaugeScaleTexts(modelId: string): string[] {
   const scale = scaleForModel(modelId);
   const labels = (max: number) => [0, 0.25, 0.5, 0.75, 1].map((f) => fmtScale(f * max));
-  return [...labels(scale.gen), ...labels(scale.prefill)];
+  return [...labels(scale.prefill), ...labels(scale.gen)];
 }
 
 afterEach(() => {
@@ -147,7 +148,7 @@ describe("AT-16/AT-17 model-keyed gauge scales (I-2′)", () => {
     expect(scaleC).toEqual(expectedGaugeScaleTexts(ornith));
   });
 
-  it("unknown modelId renders at FALLBACK_SCALE with the Default Scale badge (×2 dials)", () => {
+  it("unknown modelId renders at FALLBACK_SCALE with a single Default Scale badge", () => {
     const unknown = makeNode("at17-a", {}, [makeLlm({ modelId: "not-in-scales-7b" })]);
     const { container } = render(<OverviewPage sparks={[unknown]} variant="gauges" />);
     const card = cards(container)[0];
@@ -155,13 +156,52 @@ describe("AT-16/AT-17 model-keyed gauge scales (I-2′)", () => {
     const badges = [...card.querySelectorAll("span")].filter(
       (s) => s.textContent === "Default Scale"
     );
-    expect(badges).toHaveLength(2); // one per dial — Generation AND Prefill
+    expect(badges).toHaveLength(1); // one card-level badge (side-by-side dials)
 
     const scale = scaleForModel("not-in-scales-7b");
     expect(scale.isFallback).toBe(true);
     expect(scale.gen).toBe(FALLBACK_SCALE.gen);
     expect(scale.prefill).toBe(FALLBACK_SCALE.prefill);
     expect(gaugeScaleTexts(card)).toEqual(expectedGaugeScaleTexts("not-in-scales-7b"));
+  });
+
+  it("manual per-Spark override wins over the model scale and drops the badge (Addendum E)", () => {
+    const unknown = makeNode("at17-b", {}, [makeLlm({ modelId: "not-in-scales-7b" })]);
+    const { container } = render(
+      <OverviewPage
+        sparks={[unknown]}
+        variant="gauges"
+        gaugeScales={{ "at17-b": { gen: 800, prefill: 4000 } }}
+      />
+    );
+    const card = cards(container)[0];
+
+    // Override maxima printed on the dials — not the fallback, not the model scale.
+    expect(gaugeScaleTexts(card)).toEqual([
+      ...[0, 0.25, 0.5, 0.75, 1].map((f) => fmtScale(f * 4000)), // Prefill (left dial)
+      ...[0, 0.25, 0.5, 0.75, 1].map((f) => fmtScale(f * 800)), // Generation (right dial)
+    ]);
+    // No fallback badge when every dial has an explicit value.
+    expect(card.textContent).not.toContain("Default Scale");
+    // The settings gear is present (capability) outside share mode.
+    expect(
+      [...card.querySelectorAll("button")].some((b) => b.getAttribute("title") === "Gauge scale settings")
+    ).toBe(true);
+  });
+
+  it("the settings gear is absent from the DOM in share mode (I-8)", () => {
+    window.history.pushState({}, "", "/?share=1");
+    const unknown = makeNode("at17-c", {}, [makeLlm({ modelId: "not-in-scales-7b" })]);
+    const { container } = render(
+      <ShareModeProvider>
+        <OverviewPage sparks={[unknown]} variant="gauges" />
+      </ShareModeProvider>
+    );
+    const card = cards(container)[0];
+    expect(
+      [...card.querySelectorAll("button")].some((b) => b.getAttribute("title") === "Gauge scale settings")
+    ).toBe(false);
+    window.history.pushState({}, "", "/");
   });
 });
 

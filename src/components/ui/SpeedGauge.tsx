@@ -4,27 +4,27 @@
  * arc, a needle, and a big digital readout below the pivot. Inline SVG — no
  * chart library.
  *
- * Honest-visuals semantics (§5.2, Addendum A/C):
- * - `max` is REQUIRED and always comes from MODEL_SCALES[modelId] (or the
- *   badged FALLBACK_SCALE). There is no adaptive scale — a dial that
- *   rescales with traffic was defect class T4 and is gone.
+ * Honest-visuals semantics (§5.2, Addenda A/C/E):
+ * - `max` is REQUIRED. Callers resolve it: per-Spark manual override
+ *   (settings gaugeScales) > MODEL_SCALES[modelId] > badged FALLBACK_SCALE.
+ *   There is no adaptive scale — a dial that rescales with traffic was
+ *   defect class T4 and is gone.
  * - No coloured zones: a universal "good throughput" range does not exist
  *   across models, so the arc is neutral.
- * - Idle is explicit: 0 tok/s for ≥ IDLE_AFTER_S dims the dial to 40% and
- *   overlays "idle" — an idle gauge must never read as healthy throughput.
+ * - No idle dimming (Operator decision, Addendum E): a zero reading renders
+ *   at full opacity like any other value — the needle at 0 is the signal.
  * - The needle is EMA-smoothed (τ = GAUGE_SMOOTH_MS) and driven by
  *   requestAnimationFrame; raw value updates only change the target.
  * - At/past max the pointer pins and takes the WARN colour (a stale
  *   MODEL_SCALES entry, not a risk state) and a note is logged.
  * - The SVG is aria-hidden; the numeric readout is the semantic source (I-6).
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { DISPLAY } from "../../config/display.js";
 
 const CX = 60;
 const CY = 64;
 const R_OUTER = 52; // outer segment band
-const R_INNER = 34; // neutral arc inner radius
 
 function fmt(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k`;
@@ -77,25 +77,21 @@ export function SpeedGauge({ label, value, max, fallbackScale = false }: SpeedGa
 
   const needleRef = useRef<SVGGElement | null>(null);
   const displayedFrac = useRef(targetFrac);
-  const lastNonZeroAt = useRef(value > 0 ? Date.now() : 0);
   const wasOver = useRef(false);
-  const [idle, setIdle] = useState(false);
 
-  // rAF needle: EMA toward the raw target at the telemetry rate; React state
-  // only changes on idle transitions (AT-14 — no high-frequency setState).
+  // rAF needle: EMA toward the raw target at the telemetry rate; no React
+  // state updates in the loop (AT-14 — no high-frequency setState).
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
     const tick = (now: number) => {
       const dt = Math.min(100, now - last);
       last = now;
-      if (value > 0) lastNonZeroAt.current = now;
       const alpha = 1 - Math.exp(-dt * EMA_PER_MS);
       displayedFrac.current += (targetFrac - displayedFrac.current) * alpha;
       if (needleRef.current) {
         needleRef.current.style.transform = `rotate(${180 * (displayedFrac.current - 1)}deg)`;
       }
-      setIdle(now - lastNonZeroAt.current >= DISPLAY.IDLE_AFTER_S * 1000);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -118,17 +114,11 @@ export function SpeedGauge({ label, value, max, fallbackScale = false }: SpeedGa
   const needleStroke = over ? "var(--color-warning)" : "var(--color-text-strong)";
 
   return (
-    <div
-      className={`relative flex flex-col items-center gap-0.5 transition-opacity duration-500 ${
-        idle ? "opacity-40" : ""
-      }`}
-    >
+    <div className="relative flex flex-col items-center gap-0.5">
       <span className="text-[11px] font-bold uppercase tracking-wide text-text">{label}</span>
       <svg
-        width={200}
-        height={146}
         viewBox="-4 0 140 96"
-        className="block max-w-full"
+        className="block h-auto w-full"
         aria-hidden="true"
       >
         {/* outer scale segments, alternating neutral shading — border-strong so
@@ -181,14 +171,10 @@ export function SpeedGauge({ label, value, max, fallbackScale = false }: SpeedGa
             </text>
           );
         })}
-        {/* neutral arc — no coloured zones (§5.2 item 2). */}
-        <path
-          d={annularSector(0.004, 1 - 0.004, R_OUTER - 11, R_INNER)}
-          fill="var(--color-border-strong)"
-          opacity={0.75}
-        />
         {/* needle: EMA-smoothed via rAF; theme-aware, WARN colour only when
-            pinned over a stale scale entry. */}
+            pinned over a stale scale entry. Long enough to read against the
+            block band (the neutral arc was dropped to fit dials side by
+            side — Operator request). */}
         <g
           ref={needleRef}
           style={{
@@ -199,7 +185,7 @@ export function SpeedGauge({ label, value, max, fallbackScale = false }: SpeedGa
           <line
             x1={CX - 5}
             y1={CY}
-            x2={CX + R_INNER - 4}
+            x2={CX + R_OUTER - 13}
             y2={CY}
             stroke={needleStroke}
             strokeWidth={2.5}
@@ -224,11 +210,6 @@ export function SpeedGauge({ label, value, max, fallbackScale = false }: SpeedGa
           </tspan>
         </text>
       </svg>
-      {idle && (
-        <span className="absolute inset-0 flex items-center justify-center pt-4 text-[11px] font-semibold uppercase tracking-wide text-muted">
-          idle
-        </span>
-      )}
       {fallbackScale && (
         <span
           className="rounded bg-warning/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-warning"
