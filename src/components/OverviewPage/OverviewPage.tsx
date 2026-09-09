@@ -50,6 +50,7 @@ function MiniStat({
   bold = true,
   title,
   wrap = false,
+  inline = false,
 }: {
   label: string;
   value: string;
@@ -58,6 +59,8 @@ function MiniStat({
   title?: string;
   /** Allow value to wrap (no ellipsis trim) — used for long model ids. */
   wrap?: boolean;
+  /** Render "label value" on a single line (value truncated, tooltip full). */
+  inline?: boolean;
 }) {
   const toneClass =
     tone === "danger"
@@ -69,6 +72,19 @@ function MiniStat({
           : tone === "success"
             ? "text-success"
             : "text-text";
+  if (inline) {
+    return (
+      <div className="flex min-w-0 items-baseline gap-1.5">
+        <span className="shrink-0 text-[10px] tracking-wide text-muted">{label}</span>
+        <span
+          className={`truncate font-tabular text-[13px] ${bold ? "font-semibold" : ""} ${toneClass}`}
+          title={title}
+        >
+          {value}
+        </span>
+      </div>
+    );
+  }
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className="text-[10px] tracking-wide text-muted">{label}</span>
@@ -266,7 +282,7 @@ function SparkCard({
       ) : (
         <>
           {/* Three headline bars: GPU alloc, Temp, Usage */}
-          <div className="flex flex-col gap-2.5">
+          <div className="flex flex-col gap-1.5">
             <MetricBar
               label="VRAM"
               value={vramUsed}
@@ -391,7 +407,7 @@ function SparkCard({
           </div>
 
           {/* Secondary stats */}
-          <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-border pt-3.5">
+          <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-border pt-2">
             <MiniStat
               label="GPU Power"
               value={`${(gpu?.power?.draw ?? 0).toFixed(1)} W / ${Math.round(gpu?.power?.limit ?? 0)} W`}
@@ -436,11 +452,11 @@ function SparkCard({
                   : `${label} · distributed LLM worker`;
                 return (
                   <MiniStat
-                    label="Worker"
+                    label="Worker:"
                     value={label}
                     tone="accent"
                     title={title}
-                    wrap
+                    inline
                   />
                 );
               }
