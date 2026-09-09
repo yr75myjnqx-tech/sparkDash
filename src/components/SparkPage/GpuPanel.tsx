@@ -146,8 +146,7 @@ export function GpuPanel({ gpu, cpu, unifiedMemory, sparkId, temperatureUnit, cl
             color={tempColor}
             width={180}
             warnBand={[DISPLAY.TEMP_WARN_C, DISPLAY.TEMP_DOMAIN_C[1]]}
-            ruleAt={DISPLAY.TEMP_THROTTLE_C}
-            axisLabel={`axis 20–95 °C, warn ≥ ${DISPLAY.TEMP_WARN_C} °C, throttle line ${DISPLAY.TEMP_THROTTLE_C} °C`}
+            axisLabel={`axis 20–95 °C, warn ≥ ${DISPLAY.TEMP_WARN_C} °C`}
             summary={`GPU temperature ${temperature} degrees Celsius over the last 5 minutes`}
           />
         }
@@ -163,7 +162,7 @@ export function GpuPanel({ gpu, cpu, unifiedMemory, sparkId, temperatureUnit, cl
               domain={DISPLAY.TEMP_DOMAIN_C}
               color={cpuTempColor}
               width={180}
-              axisLabel={`axis 20–95 °C, warn ≥ ${DISPLAY.TEMP_WARN_C} °C, throttle line ${DISPLAY.TEMP_THROTTLE_C} °C`}
+              axisLabel={`axis 20–95 °C, warn ≥ ${DISPLAY.TEMP_WARN_C} °C`}
               summary={`CPU temperature ${cpuTemperature} degrees Celsius over the last 5 minutes`}
             />
           }

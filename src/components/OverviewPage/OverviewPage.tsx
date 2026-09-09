@@ -256,7 +256,7 @@ function SparkCard({
       ) : (
         <>
           {/* Three headline bars: GPU alloc, Temp, Usage */}
-          <div className="flex flex-col gap-3.5">
+          <div className="flex flex-col gap-2.5">
             <MetricBar
               label="VRAM"
               value={vramUsed}
@@ -295,7 +295,7 @@ function SparkCard({
             })()}
             {/* Temperature — trend is a sparkline, not a bar (§5.1): fixed
                 20–95 °C domain, warn band, throttle rule. */}
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-xs text-muted">
                   {spark.kind === "host" || (spark.metrics.cpu?.temperature ?? 0) > 0
@@ -311,8 +311,7 @@ function SparkCard({
                 height={26}
                 fullWidth
                 warnBand={[DISPLAY.TEMP_WARN_C, DISPLAY.TEMP_DOMAIN_C[1]]}
-                ruleAt={DISPLAY.TEMP_THROTTLE_C}
-                axisLabel={`axis 20–95 °C, warn ≥ ${DISPLAY.TEMP_WARN_C} °C, throttle line ${DISPLAY.TEMP_THROTTLE_C} °C`}
+                axisLabel={`axis 20–95 °C, warn ≥ ${DISPLAY.TEMP_WARN_C} °C`}
                 summary={
                   tempTrend
                     ? `GPU temperature ${displayTemp} degrees Celsius, ${tempTrend} over the last 5 minutes`
@@ -328,7 +327,7 @@ function SparkCard({
                 temperatureUnit === "fahrenheit" ? `${cpuDisplay}°F` : `${cpuDisplay}°C`;
               const cpuTrend = describeTrend(cpuTempHistory, 0.5);
               return (
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-xs text-muted">CPU</span>
                     <span className="font-tabular text-sm text-text">{cpuLabel}</span>
@@ -360,7 +359,7 @@ function SparkCard({
               </div>
             )}
             {/* Usage — utilisation is never risk-coloured (I-3). */}
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-xs text-muted">Usage</span>
                 <span className="font-tabular text-sm text-text">{usage}%</span>
@@ -550,7 +549,7 @@ function SparkCard({
                       {backendLabel}: {displayModel(llm.modelId)}
                     </span>
                   </div>
-                  <div className="mt-3 flex flex-col gap-3">
+                  <div className="mt-2 flex flex-col gap-1">
                     <SpeedGauge
                       label="Generation"
                       value={llm.generationTps}
@@ -777,7 +776,7 @@ export function OverviewPage({
           className="font-normal leading-tight tracking-tight text-text-strong"
           style={{ fontSize: "var(--density-overview-title)" }}
         >
-          {variant === "gauges" ? "Gauges" : "Overview"}
+          {variant === "gauges" ? "Alt-overview" : "Overview"}
         </h1>
         <div className="flex flex-wrap items-end justify-end gap-3">
           {batchMsg && (

@@ -131,13 +131,17 @@ export function SpeedGauge({ label, value, max, fallbackScale = false }: SpeedGa
         className="block max-w-full"
         aria-hidden="true"
       >
-        {/* outer scale segments, alternating neutral shading */}
+        {/* outer scale segments, alternating neutral shading — border-strong so
+            the dial structure reads in both themes (border alone vanishes on
+            the dark surface). */}
         {segs.map((i) => (
           <path
             key={i}
             d={annularSector(i / SEGMENTS + 0.012, (i + 1) / SEGMENTS - 0.012, R_OUTER, R_OUTER - 9)}
-            fill={i % 2 === 0 ? "var(--color-border)" : "var(--color-surface-hover)"}
-            opacity={i % 2 === 0 ? 0.7 : 1}
+            fill={i % 2 === 0 ? "var(--color-border-strong)" : "var(--color-surface-hover)"}
+            stroke="var(--color-border-strong)"
+            strokeWidth={0.4}
+            opacity={i % 2 === 0 ? 0.9 : 1}
           />
         ))}
         {/* major tick marks at the labelled fractions — give the dial visible
@@ -153,8 +157,8 @@ export function SpeedGauge({ label, value, max, fallbackScale = false }: SpeedGa
               x2={t2.x}
               y2={t2.y}
               stroke="var(--color-text-strong)"
-              strokeWidth={frac === 0 || frac === 1 ? 1.4 : 1}
-              opacity={0.75}
+              strokeWidth={frac === 0 || frac === 1 ? 1.6 : 1.2}
+              opacity={0.9}
             />
           );
         })}
@@ -170,8 +174,8 @@ export function SpeedGauge({ label, value, max, fallbackScale = false }: SpeedGa
               y={p.y + 2.8}
               textAnchor="middle"
               fontSize={8}
-              fontWeight={600}
-              fill="var(--color-text)"
+              fontWeight={700}
+              fill="var(--color-text-strong)"
             >
               {fmt(frac * scale)}
             </text>
@@ -180,8 +184,8 @@ export function SpeedGauge({ label, value, max, fallbackScale = false }: SpeedGa
         {/* neutral arc — no coloured zones (§5.2 item 2). */}
         <path
           d={annularSector(0.004, 1 - 0.004, R_OUTER - 11, R_INNER)}
-          fill="var(--color-border)"
-          opacity={0.5}
+          fill="var(--color-border-strong)"
+          opacity={0.75}
         />
         {/* needle: EMA-smoothed via rAF; theme-aware, WARN colour only when
             pinned over a stale scale entry. */}

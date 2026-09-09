@@ -450,7 +450,7 @@ function GaugesTab({
         title="tok/s speedometer view"
       >
         <GaugeIcon className="h-3.5 w-3.5" />
-        Gauges
+        Alt-overview
       </button>
     </div>
   );
@@ -558,7 +558,7 @@ function MobileSparkMenu({
         onClick={() => handleItemClick(GAUGES_ID)}
       >
         <GaugeIcon className="h-3.5 w-3.5" />
-        Gauges
+        Alt-overview
       </button>
       <button
         type="button"
