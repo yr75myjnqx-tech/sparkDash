@@ -19,7 +19,7 @@ vi.mock("../../api/client", () => ({
   wakeAllSparks: vi.fn(),
 }));
 
-const GAUGE_VIEWBOX = '-4 0 140 96';
+const GAUGE_VIEWBOX = '-10 0 140 96';
 
 function makeLlm(overrides: Partial<LlmMetrics> = {}): LlmMetrics {
   return {
