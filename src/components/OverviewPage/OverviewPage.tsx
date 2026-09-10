@@ -305,7 +305,7 @@ function SparkCard({
             })()}
             {/* Temperature — trend is a sparkline, not a bar (§5.1): fixed
                 20–95 °C domain, warn band, throttle rule. */}
-            <div className="space-y-0.5">
+            <div className="mt-1.5 space-y-0.5">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-xs text-muted">
                   {spark.kind === "host" || (spark.metrics.cpu?.temperature ?? 0) > 0
@@ -481,7 +481,6 @@ function SparkCard({
                     {headName
                       ? `CLUSTER WORKER — metrics served by ${headName} (head)`
                       : "CLUSTER WORKER — metrics served by the cluster head"}
-                    <span aria-hidden="true" className="ml-1 cursor-help text-[10px]">?</span>
                     <span className="sr-only"> {hint}</span>
                   </p>
                 </div>
